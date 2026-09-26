@@ -1,6 +1,6 @@
 import enum
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -149,6 +149,7 @@ class Account(db.Model):
     payouts = db.relationship("Payout", back_populates="account", lazy="dynamic")
     distribution = db.relationship("Distribution", foreign_keys=[distribution_id])
     activity_logs = db.relationship("ActivityLog", back_populates="account", lazy="dynamic")
+    daily_results = db.relationship("DailyResult", back_populates="account", lazy="dynamic")
 
     @property
     def room(self):
@@ -171,12 +172,16 @@ class Account(db.Model):
 
 class Trade(db.Model):
     __tablename__ = "trades"
+    __table_args__ = (db.UniqueConstraint("account_id", "import_hash"),)
 
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey("bots.id"), nullable=True, index=True)
+    import_hash = db.Column(db.String(64), nullable=True)
     opened_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     closed_at = db.Column(db.DateTime, nullable=True)
     direction = db.Column(db.String(8), nullable=True)  # LONG / SHORT
+    signal_name = db.Column(db.String(256), nullable=True)
 
     signal_price = db.Column(db.Numeric(12, 4), nullable=True)
     fill_price = db.Column(db.Numeric(12, 4), nullable=True)
@@ -191,9 +196,77 @@ class Trade(db.Model):
     rejection_reason = db.Column(db.String(256), nullable=True)
 
     account = db.relationship("Account", back_populates="trades")
+    bot = db.relationship("Bot", back_populates="trades")
 
     def __repr__(self):
         return f"<Trade {self.id} pnl={self.pnl}>"
+
+
+class Bot(db.Model):
+    __tablename__ = "bots"
+    __table_args__ = (db.UniqueConstraint("user_id", "name", "version"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    name = db.Column(db.String(128), nullable=False)
+    version = db.Column(db.String(64), nullable=False, default="1")
+    source = db.Column(db.String(128), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = db.relationship("User")
+    trades = db.relationship("Trade", back_populates="bot", lazy="dynamic")
+    daily_results = db.relationship("DailyResult", back_populates="bot", lazy="dynamic")
+    events = db.relationship("BotEvent", back_populates="bot", lazy="dynamic")
+    distributions = db.relationship("Distribution", back_populates="bot", lazy="dynamic")
+
+    def __repr__(self):
+        return f"<Bot {self.name} v{self.version}>"
+
+
+class DailyResult(db.Model):
+    __tablename__ = "daily_results"
+    __table_args__ = (db.UniqueConstraint("account_id", "trade_date"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey("bots.id"), nullable=True, index=True)
+    trade_date = db.Column(db.Date, nullable=False)
+    pnl = db.Column(db.Numeric(12, 2), nullable=False)
+    source = db.Column(db.String(24), nullable=False, default="MANUAL")
+    notes = db.Column(db.Text, nullable=True)
+    balance_before = db.Column(db.Numeric(12, 2), nullable=False)
+    peak_before = db.Column(db.Numeric(12, 2), nullable=False)
+    floor_before = db.Column(db.Numeric(12, 2), nullable=False)
+    best_day_before = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    phase_before = db.Column(db.String(16), nullable=False)
+    closed_at_before = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    account = db.relationship("Account", back_populates="daily_results")
+    bot = db.relationship("Bot", back_populates="daily_results")
+
+    def __repr__(self):
+        return f"<DailyResult {self.trade_date} pnl={self.pnl}>"
+
+
+class BotEvent(db.Model):
+    __tablename__ = "bot_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey("bots.id"), nullable=False, index=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=True, index=True)
+    event_type = db.Column(db.String(24), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    event_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    source_key = db.Column(db.String(64), nullable=True, unique=True)
+
+    bot = db.relationship("Bot", back_populates="events")
+    account = db.relationship("Account")
+
+    def __repr__(self):
+        return f"<BotEvent {self.event_type} bot={self.bot_id}>"
 
 
 class Payout(db.Model):
@@ -213,6 +286,8 @@ class Distribution(db.Model):
     __tablename__ = "distributions"
 
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey("bots.id"), nullable=True, index=True)
     name = db.Column(db.String(128), nullable=False)
     source = db.Column(db.String(256), nullable=True)
     win_multiples_json = db.Column(db.Text, nullable=False)
@@ -221,6 +296,8 @@ class Distribution(db.Model):
     base_risk = db.Column(db.Numeric(12, 2), nullable=False)
     signal_frequency = db.Column(db.Numeric(5, 4), nullable=False, default=0.68)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    bot = db.relationship("Bot", back_populates="distributions")
 
     @property
     def win_multiples(self):

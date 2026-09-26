@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Bots — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title">Bots &amp; strategies</h1>
+    <span class="page-sub">External systems tracked here; Prop Desk does not place orders.</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 class="panel-title">Register a bot version</h2>
+  <form method="POST" action="{{ url_for('bots.index') }}">
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="bot-name">Bot or strategy</label>
+        <input class="input" id="bot-name" name="name" required maxlength="128" placeholder="MNQ morning breakout">
+      </div>
+      <div class="field">
+        <label class="label" for="bot-version">Version</label>
+        <input class="input" id="bot-version" name="version" value="1" maxlength="64">
+      </div>
+      <div class="field">
+        <label class="label" for="bot-source">Source</label>
+        <input class="input" id="bot-source" name="source" maxlength="128" placeholder="TradingView / TradersPost">
+      </div>
+      <div class="field">
+        <label class="label" for="bot-notes">Notes</label>
+        <input class="input" id="bot-notes" name="notes" maxlength="1000" placeholder="Settings or change notes">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--primary btn--sm">Add version</button>
+  </form>
+</div>
+
+{% if bot_rows %}
+{% for row in bot_rows %}
+<section class="panel bot-panel">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title">{{ row.bot.name }} <span class="text-dim">v{{ row.bot.version }}</span></h2>
+      <p class="panel-note">{{ row.bot.source or 'Source not specified' }} · {{ row.trade_count }} imported or logged trade{{ 's' if row.trade_count != 1 else '' }}</p>
+      {% if row.bot.notes %}<p class="panel-note">{{ row.bot.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('bots.add_event', bot_id=row.bot.id) }}" class="bot-event-form">
+    <div class="field-row">
+      <div class="field">
+        <label class="label">Event</label>
+        <select class="input" name="event_type">
+          {% for event_type in event_types %}<option value="{{ event_type }}">{{ event_type }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label">Account</label>
+        <select class="input" name="account_id">
+          <option value="">No account</option>
+          {% for account in accounts %}<option value="{{ account.id }}">{{ account.nickname }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label">Date and time</label>
+        <input class="input" type="datetime-local" name="event_at">
+      </div>
+      <div class="field">
+        <label class="label">Details</label>
+        <input class="input" name="message" required maxlength="2000" placeholder="Signal, order ID, rejection reason, error…">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--ghost btn--sm">Record event</button>
+  </form>
+
+  {% if row.events %}
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th>Time</th><th>Type</th><th>Account</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for event in row.events %}
+        <tr>
+          <td class="num">{{ event.event_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td><span class="log-kind">{{ event.event_type }}</span></td>
+          <td>{{ event.account.nickname if event.account else '—' }}</td>
+          <td>{{ event.message }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="hint">No bot events recorded yet.</p>{% endif %}
+</section>
+{% endfor %}
+{% else %}
+<div class="empty-state"><p>No bots registered yet.</p></div>
+{% endif %}
+{% endblock %}

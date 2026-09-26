@@ -132,6 +132,7 @@ The single most important output here is the **withdrawal discipline curve**: mo
 
 ### Portfolio dashboard
 - One card per account: phase, balance, room, losses survivable, progress to target, current risk setting, and whether that setting is still correct
+- Green/red outlines show net account performance after net payouts and account costs
 - **Portfolio health score** driven by the weakest account, not the average
 - Joint-wipeout probability across all accounts on the shared signal
 - Total projected monthly income once all accounts are funded
@@ -144,8 +145,20 @@ The single most important output here is the **withdrawal discipline curve**: mo
 
 ### Trade log
 - Add a trade: date, direction, entry, exit, size, P&L, which account
-- Bulk import from a TradingView strategy CSV export
-- Every entry recomputes account state, floor, win rate, and recommendations
+- Import actual fills from a CSV, preview rows, map common columns, and safely repeat uploads without duplicating fills
+- Keep imported trading days open for later fills; explicitly finalize days to update EOD floors
+- Enter one net daily result instead of individual trades, and correct the latest daily result before later activity is recorded
+- Link fills and daily results to a named bot version
+
+### Bots and calendar
+- Register bot/strategy versions and record signal, order, fill, rejection, error, and note events
+- Imported fills appear in the bot's event history; manually entered events can be linked to accounts
+- Calendar view groups daily results and trades by date, with account filters and monthly totals
+
+### Backtests and projections
+- Import a separate backtest CSV to create a versioned distribution from P&L divided by base risk; this never changes account balance
+- Funded projections show simulated monthly payout ranges, breach frequency, and a withdrawal-cushion curve using editable payout assumptions
+- Distributions and bot metadata created by a user are private to that user
 
 ### Settings advisor
 The daily driver. For each account, given today's state:
@@ -184,7 +197,11 @@ Account         id, user_id, firm_id, nickname, external_id, phase,
                 opened_at, closed_at
 Trade           id, account_id, opened_at, closed_at, direction,
                 signal_price, fill_price, exit_signal_price, exit_fill_price,
-                quantity, pnl, r_multiple, was_rejected, rejection_reason
+                quantity, pnl, r_multiple, was_rejected, rejection_reason,
+                bot_id, import_hash
+Bot             id, user_id, name, version, source, notes, active
+DailyResult     id, account_id, bot_id, trade_date, pnl, source, correction snapshot
+BotEvent        id, bot_id, account_id, event_type, message, event_at, source_key
 Payout          id, account_id, requested_at, gross, net, balance_after
 Distribution    id, name, source, win_multiples_json, loss_multiples_json,
                 qty_at_base_risk_json, base_risk, signal_frequency
@@ -207,16 +224,23 @@ GET  /accounts/new
 POST /accounts
 GET  /accounts/<id>
 POST /accounts/<id>/trades
+POST /accounts/<id>/daily-result
+POST /accounts/<id>/close-day
 POST /accounts/<id>/payouts
 POST /accounts/<id>/risk     update current risk setting
 
 GET  /advisor                cross-account daily recommendations
 GET  /stats
 GET  /log
+GET  /bots
+GET  /calendar
+GET  /projections
 
 GET  /api/simulate           ?account_id&risk[]  -> odds for each candidate
 GET  /api/portfolio-risk     joint simulation across all accounts
-POST /api/import-csv         TradingView strategy export
+GET  /api/imports             actual fills and backtest uploads
+POST /api/import-csv          actual trade fills
+POST /api/import-distribution backtest outcomes to R-multiples
 ```
 
 Simulation endpoints return JSON and are called from the client so risk sliders update live. Cache results by `(account_state_hash, risk)` for 15 minutes. Simulations are expensive and account state only changes on a trade.
@@ -280,12 +304,12 @@ SEED_PASSWORD      temporary, must be changed on first login
 
 1. Auth, user model, seeded login, base layout
 2. Account model and CRUD, one hardcoded firm ruleset
-3. Trade entry, balance and trailing-floor recomputation
+3. Trade entry and balance updates; EOD floors update when a day is finalized
 4. Room and risk ladder, displayed on the account card
 5. Monte Carlo engine plus `/api/simulate`
 6. Portfolio dashboard with joint simulation
-7. CSV import and the distribution model
-8. Funded-phase payout modelling and the withdrawal discipline curve
+7. Actual-fill CSV import, bot versions, and backtest distribution import
+8. Funded-phase payout projections and the withdrawal discipline curve
 9. Stats page, weekday breakdown, slippage tracker
 10. Activity log
 11. Design pass
@@ -296,7 +320,9 @@ Ship 1 through 4 before writing any simulation code. An account card that correc
 
 ## Acceptance criteria
 
-- Adding a trade updates balance, peak, trailing floor, room, losses survivable, and win rate, and writes an activity log entry, in one action
+- Adding a trade updates balance, room, losses survivable, and win rate, and writes an activity log entry; EOD floor and phase are evaluated when the day is closed
+- Correcting the latest daily result applies only the difference and preserves an audit entry
+- Reimporting a fill CSV does not duplicate fills or account P&L
 - The risk ladder shows at least four loss counts with pass odds for each
 - Proposing a risk setting above the 3-loss threshold triggers a visible warning with the real odds, not a silent accept
 - Portfolio joint-wipeout probability uses a shared trade sequence
@@ -309,5 +335,9 @@ Ship 1 through 4 before writing any simulation code. An account card that correc
 ## Known limits
 
 Every projection assumes the imported distribution keeps describing the future. It probably does not, exactly. Backtest exports typically carry **zero commission and zero slippage**, so treat imported win rates as an optimistic ceiling and let the slippage tracker replace them with measured numbers as real fills accumulate. The app should make that divergence visible rather than hiding it behind a single confident number.
+
+Bot entries here are tracking records; this app does not run the trading strategy or connect directly to TradingView or TradersPost. Bot events can be entered in the UI, and actual fills can be imported from CSV. Import complete or incremental exports for open days; duplicate fills are skipped, and a finalized day cannot accept later fills. Backtest distributions are separate from actual fills and require the user to choose the P&L column, base risk, and signal frequency. Funded projections currently simplify firm-specific rules and should be treated as scenarios, not payout promises.
+
+Run the focused automated checks with `python -m unittest discover -s tests`. Apply schema changes with `flask db upgrade` before deploying.
 
 This is a record-keeping and decision-support tool. It does not place orders, and it is not financial advice.

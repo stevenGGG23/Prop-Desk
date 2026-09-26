@@ -56,6 +56,50 @@
   {% endif %}
 </div>
 
+{# ─── Daily P&L ─── #}
+{% if account.phase.value not in ['BREACHED', 'PASSED'] %}
+<div class="panel daily-result-panel">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title">Daily result</h2>
+      <p class="panel-note">Enter the day's net P&amp;L once. A positive amount is a win; a negative amount is a loss.</p>
+    </div>
+  </div>
+  <form method="POST" action="{{ url_for('accounts.save_daily_result', account_id=account.id) }}">
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="daily-date">Trading date</label>
+        <input class="input" type="date" id="daily-date" name="trade_date"
+           value="{{ editable_daily_result.trade_date.isoformat() if editable_daily_result else today.isoformat() }}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="daily-pnl">Net P&amp;L ($)</label>
+        <input class="input num" type="number" id="daily-pnl" name="pnl" step="0.01"
+               value="{{ editable_daily_result.pnl|float if editable_daily_result else '' }}"
+               placeholder="+250 or -125" required>
+      </div>
+      <div class="field">
+        <label class="label" for="daily-bot">Bot / strategy</label>
+        <select class="input" id="daily-bot" name="bot_id">
+          <option value="">Manual / not assigned</option>
+          {% for bot in bots %}
+          <option value="{{ bot.id }}" {% if editable_daily_result and editable_daily_result.bot_id == bot.id %}selected{% endif %}>{{ bot.name }} v{{ bot.version }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="daily-notes">Notes</label>
+        <input class="input" id="daily-notes" name="notes" maxlength="1000"
+               value="{{ editable_daily_result.notes if editable_daily_result and editable_daily_result.notes else '' }}"
+               placeholder="Optional">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--primary btn--sm">{{ 'Update latest day' if editable_daily_result else 'Save daily result' }}</button>
+    <span class="hint">A new daily total cannot be combined with trade entries for that same date. Only the latest manual result can be edited.</span>
+  </form>
+</div>
+{% endif %}
+
 {# ─── Risk warning ─── #}
 {% if risk_warning and account.current_risk %}
 <div class="risk-warning-banner">
@@ -174,6 +218,13 @@
           <input class="input num" type="number" name="quantity" placeholder="1">
         </div>
         <div class="field">
+          <label class="label">Bot / strategy</label>
+          <select class="input" name="bot_id">
+            <option value="">Not assigned</option>
+            {% for bot in bots %}<option value="{{ bot.id }}">{{ bot.name }} v{{ bot.version }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
           <label class="label">Signal price</label>
           <input class="input num" type="number" name="signal_price" step="0.0001">
         </div>
@@ -186,12 +237,20 @@
     </form>
   </div>
 
+  {% if latest_open_trade_day %}
+  <form method="POST" action="{{ url_for('accounts.close_trading_day', account_id=account.id) }}" class="close-day-form">
+    <span class="hint">{{ open_trade_day_count }} unclosed day(s), starting {{ latest_open_trade_day.isoformat() }}. Individual trades are included.</span>
+    <button type="submit" class="btn btn--ghost btn--sm">Close unclosed days &amp; update floor</button>
+  </form>
+  {% endif %}
+
   {% if trades %}
   <div class="table-scroll">
     <table class="table">
       <thead>
         <tr>
           <th>Date</th>
+          <th>Bot</th>
           <th>Dir</th>
           <th class="num-col">P&amp;L</th>
           <th class="num-col">R</th>
@@ -205,6 +264,7 @@
         {% for trade in trades %}
         <tr class="{% if trade.pnl|float > 0 %}row--win{% elif trade.pnl|float < 0 %}row--loss{% endif %}">
           <td>{{ trade.opened_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ trade.bot.name ~ ' v' ~ trade.bot.version if trade.bot else '—' }}</td>
           <td>{{ trade.direction or '—' }}</td>
           <td class="num {% if trade.pnl|float > 0 %}text-profit{% else %}text-loss{% endif %}">${{ "{:+,.2f}".format(trade.pnl|float) }}</td>
           <td class="num">{{ "%.2f"|format(trade.r_multiple|float) if trade.r_multiple else '—' }}</td>
@@ -286,10 +346,11 @@ const ctx = document.getElementById('equity-chart').getContext('2d');
 new Chart(ctx, {
   type: 'line',
   data: {
+    labels: equityData.map(p => new Date(p.t).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})),
     datasets: [
       {
         label: 'Balance',
-        data: equityData.map(p => ({ x: p.t, y: p.v })),
+        data: equityData.map(p => p.v),
         borderColor: '#06b6d4',
         borderWidth: 2,
         pointRadius: 0,
@@ -298,7 +359,7 @@ new Chart(ctx, {
       },
       {
         label: 'Floor',
-        data: floorData.map(p => ({ x: p.t, y: p.v })),
+        data: floorData.map(p => p.v),
         borderColor: '#64748b',
         borderWidth: 1.5,
         pointRadius: 0,
@@ -327,7 +388,6 @@ new Chart(ctx, {
     },
     scales: {
       x: {
-        type: 'time',
         ticks: { color: '#64748b', maxTicksLimit: 8 },
         grid: { color: 'rgba(34,44,58,0.6)' },
       },

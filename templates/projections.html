@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Projections — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title">Funded projections</h1>
+    <span class="page-sub">Scenario estimates from the selected strategy distribution.</span>
+  </div>
+</div>
+
+{% if not accounts %}
+<div class="empty-state">
+  <p>No accounts have a trade distribution yet.</p>
+  <p class="text-dim">Link a backtest distribution to an account to run payout scenarios.</p>
+</div>
+{% else %}
+<div class="panel projection-panel">
+  <form method="POST" action="{{ url_for('projections.index') }}">
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="projection-account">Account</label>
+        <select class="input" id="projection-account" name="account_id" required>
+          {% for account in accounts %}
+          <option value="{{ account.id }}" {% if selected and selected.id == account.id %}selected{% endif %}>{{ account.nickname }} · {{ account.phase.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="projection-risk">Risk per trade ($)</label>
+        <input class="input num" id="projection-risk" type="number" name="risk" min="1" step="50" value="{{ values.risk }}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="projection-cap">Payout cap ($)</label>
+        <input class="input num" id="projection-cap" type="number" name="payout_cap" min="1" step="50" value="{{ values.payout_cap }}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="projection-split">Profit split</label>
+        <input class="input num" id="projection-split" type="number" name="profit_split" min="0.01" max="1" step="0.01" value="{{ values.profit_split }}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="projection-minimum">Balance to maintain ($)</label>
+        <input class="input num" id="projection-minimum" type="number" name="min_balance" min="0" step="50" value="{{ values.min_balance }}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="projection-frequency">Payout interval</label>
+        <select class="input" id="projection-frequency" name="payout_frequency_days">
+          <option value="1" {% if values.payout_frequency_days == 1 %}selected{% endif %}>Daily</option>
+          <option value="5" {% if values.payout_frequency_days == 5 %}selected{% endif %}>Every 5 calendar days</option>
+          <option value="10" {% if values.payout_frequency_days == 10 %}selected{% endif %}>Every 10 calendar days</option>
+          <option value="15" {% if values.payout_frequency_days == 15 %}selected{% endif %}>Every 15 calendar days</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="projection-qualifying">Qualifying day minimum ($)</label>
+        <input class="input num" id="projection-qualifying" type="number" name="qualifying_day_min" min="0" step="25" value="{{ values.qualifying_day_min }}">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--primary">Run scenario</button>
+  </form>
+</div>
+
+{% if result %}
+<p class="projection-assumptions">{{ selected.nickname }} · {{ selected.distribution.name }} · {{ result.n_runs }} simulated 90-day paths</p>
+<div class="metrics-row">
+  <div class="metric-box">
+    <span class="metric-box-value num">${{ "{:,.0f}".format(result.median_monthly) }}</span>
+    <span class="metric-box-label">Median monthly payout</span>
+  </div>
+  <div class="metric-box">
+    <span class="metric-box-value num">${{ "{:,.0f}".format(result.p25_monthly) }} – ${{ "{:,.0f}".format(result.p75_monthly) }}</span>
+    <span class="metric-box-label">Middle 50% range</span>
+  </div>
+  <div class="metric-box {% if result.breach_pct > 20 %}metric-box--danger{% endif %}">
+    <span class="metric-box-value num">{{ "%.1f"|format(result.breach_pct) }}%</span>
+    <span class="metric-box-label">Simulated breach rate</span>
+  </div>
+  <div class="metric-box">
+    <span class="metric-box-value num">${{ "{:,.0f}".format(result.median_90d_payout) }}</span>
+    <span class="metric-box-label">Median 90-day payouts</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 class="panel-title">Withdrawal cushion</h2>
+  <p class="panel-note">More balance retained may reduce payouts while lowering modeled breach risk. The curve varies your chosen minimum balance.</p>
+  <div class="chart-wrap"><canvas id="payout-curve"></canvas></div>
+  <div class="table-scroll">
+    <table class="table">
+      <thead><tr><th class="num-col">Balance retained</th><th class="num-col">Median monthly payout</th><th class="num-col">Breach rate</th></tr></thead>
+      <tbody>
+        {% for row in curve %}
+        <tr>
+          <td class="num">${{ "{:,.0f}".format(row.min_balance) }}</td>
+          <td class="num">${{ "{:,.0f}".format(row.monthly_income) }}</td>
+          <td class="num {% if row.breach_pct > 20 %}text-loss{% endif %}">{{ "%.1f"|format(row.breach_pct) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="projection-disclaimer">These are Monte Carlo estimates, not expected or guaranteed earnings. Results assume the historical distribution, signal frequency, and payout terms remain representative. Actual firm rules, execution costs, consistency limits, and account behavior can differ.</p>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if curve %}
+<script>
+const payoutCurve = {{ curve | tojson }};
+new Chart(document.getElementById('payout-curve'), {
+  type: 'line',
+  data: {
+    labels: payoutCurve.map(row => '$' + Number(row.min_balance).toLocaleString()),
+    datasets: [
+      { label: 'Median monthly payout', data: payoutCurve.map(row => row.monthly_income), borderColor: '#16a34a', yAxisID: 'income', tension: 0.15 },
+      { label: 'Breach rate', data: payoutCurve.map(row => row.breach_pct), borderColor: '#dc2626', yAxisID: 'risk', tension: 0.15 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: true } },
+    scales: {
+      x: { grid: { color: 'rgba(34,44,58,0.5)' } },
+      income: { position: 'left', title: { display: true, text: 'Monthly payout ($)' }, ticks: { callback: value => '$' + Number(value).toLocaleString() }, grid: { color: 'rgba(34,44,58,0.5)' } },
+      risk: { position: 'right', min: 0, max: 100, title: { display: true, text: 'Breach rate (%)' }, grid: { drawOnChartArea: false } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

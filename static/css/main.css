@@ -332,6 +332,16 @@ h3 { font-size: 1rem; font-weight: 600; }
   border-color: rgba(234,179,8,0.35);
 }
 
+.account-card--winning {
+  border-color: rgba(22,163,74,0.65);
+  box-shadow: 0 0 0 1px rgba(22,163,74,0.12), 0 0 12px rgba(22,163,74,0.12);
+}
+
+.account-card--losing {
+  border-color: rgba(220,38,38,0.65);
+  box-shadow: 0 0 0 1px rgba(220,38,38,0.12), 0 0 12px rgba(220,38,38,0.12);
+}
+
 /* Card Header */
 .card-header {
   display: flex;
@@ -1323,7 +1333,17 @@ select.input {
 
   .nav-links {
     gap: 2px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+
+  .nav-links::-webkit-scrollbar { display: none; }
+
+  .nav-left { gap: 8px; }
+  .nav-right { gap: 6px; }
+  .nav-user { display: none; }
 
   .nav-link {
     padding: 5px 8px;
@@ -1348,6 +1368,12 @@ select.input {
   .form-card {
     padding: 16px;
   }
+}
+
+@media (max-width: 480px) {
+  .nav { padding: 0 8px; gap: 6px; }
+  .nav-link { padding: 5px 6px; font-size: 11px; }
+  .calendar-toolbar { align-items: flex-start; flex-direction: column; }
 }
 
 /* ---------------------------------------------------------
@@ -1424,6 +1450,33 @@ select.input {
 .row--dim     { opacity: 0.5; }
 
 .table-scroll { overflow-x: auto; }
+
+.bot-panel, .daily-result-panel, .import-panel { margin-top: 16px; }
+.bot-event-form { margin: 14px 0; }
+.close-day-form, .import-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.csv-mapping { margin: 14px 0; }
+.csv-mapping summary { color: var(--accent); cursor: pointer; margin-bottom: 10px; }
+.import-result { margin-top: 14px; }
+.import-result:empty { display: none; }
+.import-errors { color: var(--red); margin: 8px 0 12px 20px; }
+
+.calendar-toolbar, .calendar-month-control { display: flex; align-items: center; gap: 10px; }
+.calendar-toolbar { justify-content: space-between; margin: 16px 0 10px; }
+.calendar-month-control h2 { min-width: 150px; text-align: center; }
+.calendar-scroll { overflow-x: auto; }
+.calendar-grid { min-width: 640px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); }
+.calendar-weekday { background: var(--surface); color: var(--ink-dim); padding: 8px 10px; font-size: 11px; text-transform: uppercase; }
+.calendar-day { min-height: 94px; background: var(--bg); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.calendar-day--outside { opacity: 0.38; }
+.calendar-day--today { box-shadow: inset 0 0 0 1px var(--accent); }
+.calendar-day--profit { background: rgba(22,163,74,0.035); }
+.calendar-day--loss { background: rgba(220,38,38,0.035); }
+.calendar-day-number { font-size: 12px; color: var(--ink-dim); }
+.calendar-day-pnl { font-size: 14px; font-weight: 600; }
+.calendar-day-detail { font-size: 10px; color: var(--ink-dim); }
+.calendar-summary { margin-bottom: 14px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.card-performance { font-size: 11px; }
 
 /* ---------------------------------------------------------
    Metric box (detail page)

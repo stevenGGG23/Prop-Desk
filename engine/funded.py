@@ -7,6 +7,7 @@ cushion you leave in the account after each withdrawal.
 """
 
 from __future__ import annotations
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import numpy as np
 
@@ -41,10 +42,18 @@ def simulate_funded_monthly(
 
     wins = np.array([m for m in win_multiples if m > 0], dtype=float)
     losses = np.array([m for m in loss_multiples if m < 0], dtype=float)
+    if not wins.size or not losses.size:
+        raise ValueError("The distribution must include at least one win and one loss.")
+    if n_runs < 1 or payout_frequency_days < 1:
+        raise ValueError("Simulation runs and payout interval must be positive.")
+    if (not 0 <= signal_frequency <= 1 or risk <= 0 or payout_cap <= 0
+            or not 0 < profit_split <= 1):
+        raise ValueError("Signal frequency, risk, payout cap, or profit split is invalid.")
     win_prob = len(wins) / (len(wins) + len(losses))
 
     total_payouts = []
     breach_count = 0
+    simulation_start = datetime.now(timezone.utc).date()
 
     for _ in range(n_runs):
         bal = current_balance
@@ -55,7 +64,9 @@ def simulate_funded_monthly(
         days_since_payout = 0
 
         for day in range(90):
-            is_signal_day = rng.random() < signal_frequency
+            is_weekday = (simulation_start + timedelta(days=day)).weekday() < 5
+            is_signal_day = is_weekday and rng.random() < signal_frequency
+            trade_pnl = 0.0
             if is_signal_day:
                 is_win = rng.random() < win_prob
                 if is_win:
@@ -118,6 +129,9 @@ def withdrawal_discipline_curve(
     risk: float,
     cushion_values: Optional[list[float]] = None,
     signal_frequency: float = 0.68,
+    min_balance_to_withdraw: Optional[float] = None,
+    payout_frequency_days: int = 1,
+    qualifying_day_min: float = 0.0,
     n_runs: int = 5_000,
 ) -> list[dict]:
     """
@@ -130,11 +144,15 @@ def withdrawal_discipline_curve(
         step = drawdown_amount * 0.1
         cushion_values = [i * step for i in range(11)]  # 0x to 1x drawdown
 
+    base_min_balance = max(
+        float(max_loss_limit),
+        float(min_balance_to_withdraw) if min_balance_to_withdraw is not None else float(max_loss_limit),
+    )
     rng = np.random.default_rng()
     results = []
 
     for cushion in cushion_values:
-        min_bal = float(max_loss_limit) + cushion
+        min_bal = base_min_balance + cushion
         sim = simulate_funded_monthly(
             current_balance=current_balance,
             max_loss_limit=max_loss_limit,
@@ -147,11 +165,13 @@ def withdrawal_discipline_curve(
             loss_multiples=loss_multiples,
             risk=risk,
             signal_frequency=signal_frequency,
+            payout_frequency_days=payout_frequency_days,
+            qualifying_day_min=qualifying_day_min,
             n_runs=n_runs,
             rng=rng,
         )
         results.append({
-            "cushion": round(cushion, 0),
+            "cushion": round(min_bal - float(max_loss_limit), 0),
             "min_balance": round(min_bal, 0),
             "monthly_income": sim["median_monthly"],
             "breach_pct": sim["breach_pct"],

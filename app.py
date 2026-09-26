@@ -44,6 +44,9 @@ def create_app(env=None):
     from routes.advisor import bp as advisor_bp
     from routes.stats import bp as stats_bp
     from routes.log import bp as log_bp
+    from routes.bots import bp as bots_bp
+    from routes.calendar import bp as calendar_bp
+    from routes.projections import bp as projections_bp
     from routes.api import bp as api_bp
 
     app.register_blueprint(auth_bp)
@@ -51,6 +54,9 @@ def create_app(env=None):
     app.register_blueprint(advisor_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(log_bp)
+    app.register_blueprint(bots_bp)
+    app.register_blueprint(calendar_bp)
+    app.register_blueprint(projections_bp)
     app.register_blueprint(api_bp)
 
     from cli import register_cli

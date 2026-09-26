@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Calendar — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title">Trading calendar</h1>
+    <span class="page-sub">Daily net P&amp;L across finalized days and logged trades.</span>
+  </div>
+</div>
+
+<div class="metrics-row calendar-summary">
+  <div class="metric-box">
+    <span class="metric-box-value num {% if totals.pnl > 0 %}text-profit{% elif totals.pnl < 0 %}text-loss{% endif %}">${{ "{:+,.2f}".format(totals.pnl) }}</span>
+    <span class="metric-box-label">Month P&amp;L</span>
+  </div>
+  <div class="metric-box"><span class="metric-box-value num">{{ totals.trades }}</span><span class="metric-box-label">Trades</span></div>
+  <div class="metric-box"><span class="metric-box-value num">{{ totals.days }}</span><span class="metric-box-label">Trading days</span></div>
+</div>
+
+<div class="calendar-toolbar">
+  <div class="calendar-month-control">
+    <a class="btn btn--ghost btn--sm" href="{{ url_for('calendar.month_view', month=previous_month.strftime('%Y-%m'), account_id=selected_account_id) }}" aria-label="Previous month">‹</a>
+    <h2>{{ month.strftime('%B %Y') }}</h2>
+    <a class="btn btn--ghost btn--sm" href="{{ url_for('calendar.month_view', month=next_month.strftime('%Y-%m'), account_id=selected_account_id) }}" aria-label="Next month">›</a>
+  </div>
+  <form method="GET" action="{{ url_for('calendar.month_view') }}" class="calendar-filter">
+    <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+    <label class="sr-only" for="calendar-account">Account</label>
+    <select class="input input--sm" id="calendar-account" name="account_id" onchange="this.form.submit()">
+      <option value="0">All accounts</option>
+      {% for account in accounts %}<option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %}>{{ account.nickname }}</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="calendar-scroll">
+  <div class="calendar-grid">
+    {% for weekday in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] %}
+    <div class="calendar-weekday">{{ weekday }}</div>
+    {% endfor %}
+    {% for week in weeks %}
+      {% for day in week %}
+      {% set data = day_totals.get(day) %}
+      <div class="calendar-day {% if day.month != month.month %}calendar-day--outside{% endif %} {% if day == today %}calendar-day--today{% endif %} {% if data and data.pnl > 0 %}calendar-day--profit{% elif data and data.pnl < 0 %}calendar-day--loss{% endif %}">
+        <span class="calendar-day-number">{{ day.day }}</span>
+        {% if data %}
+        <span class="calendar-day-pnl num {% if data.pnl > 0 %}text-profit{% elif data.pnl < 0 %}text-loss{% endif %}">${{ "{:+,.0f}".format(data.pnl) }}</span>
+        <span class="calendar-day-detail">{{ data.trades }} trade{{ 's' if data.trades != 1 else '' }} · {{ data.accounts|length }} account{{ 's' if data.accounts|length != 1 else '' }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

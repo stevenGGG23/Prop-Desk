@@ -1,12 +1,15 @@
 import json
-from datetime import datetime, timezone
+import math
+from datetime import date, datetime, timezone
 
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
+from sqlalchemy import or_
 
 from app import db
-from models import (Account, Trade, Payout, Firm, Distribution, ActivityLog,
-                    Phase, DrawdownType, ActivityKind)
+from models import (Account, Bot, DailyResult, Trade, Payout, Firm, Distribution,
+                    ActivityLog, Phase, DrawdownType, ActivityKind)
+from engine.accounting import apply_daily_result
 from engine.risk import (room, losses_survivable, risk_ladder,
                           update_eod_floor, check_risk_warning)
 
@@ -58,6 +61,58 @@ def _check_phase_after_trade(account):
                  account=account)
 
 
+def _latest_ledger_date(account, exclude_daily_result_id=None):
+    event_dates = [
+        (trade.closed_at or trade.opened_at).date()
+        for trade in account.trades.all()
+    ]
+    event_dates.extend(
+        result.trade_date
+        for result in account.daily_results.all()
+        if result.id != exclude_daily_result_id
+    )
+    event_dates.extend(payout.requested_at.date() for payout in account.payouts.all())
+    return max(event_dates) if event_dates else None
+
+
+def _open_trade_dates(account):
+    finalized_dates = {result.trade_date for result in account.daily_results.all()}
+    return {
+        (trade.closed_at or trade.opened_at).date()
+        for trade in account.trades.all()
+        if (trade.closed_at or trade.opened_at).date() not in finalized_dates
+    }
+
+
+def _restore_daily_snapshot(account, result):
+    account.current_balance = result.balance_before
+    account.peak_balance = result.peak_before
+    account.max_loss_limit = result.floor_before
+    account.best_day_so_far = result.best_day_before
+    account.phase = Phase[result.phase_before]
+    account.closed_at = result.closed_at_before
+
+
+def _apply_daily_close(account, pnl):
+    if account.drawdown_type == DrawdownType.EOD_TRAILING:
+        state = apply_daily_result(
+            current_balance=float(account.current_balance),
+            peak_balance=float(account.peak_balance),
+            max_loss_limit=float(account.max_loss_limit),
+            daily_pnl=float(pnl),
+            drawdown_amount=float(account.drawdown_amount),
+            lock_threshold=float(account.lock_threshold),
+        )
+        account.current_balance = state["balance"]
+        account.peak_balance = state["peak_balance"]
+        account.max_loss_limit = state["max_loss_limit"]
+    else:
+        account.current_balance = float(account.current_balance) + float(pnl)
+        if account.drawdown_type == DrawdownType.INTRADAY_TRAILING:
+            _apply_eod_floor(account)
+    _check_phase_after_trade(account)
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -84,6 +139,11 @@ def dashboard():
         trade_count = acct.trades.count()
         win_count = acct.trades.filter(Trade.pnl > 0).count()
         win_rate = (win_count / trade_count * 100) if trade_count else None
+        net_performance = (
+            float(acct.current_balance) - float(acct.starting_balance)
+            + sum(float(payout.net) for payout in acct.payouts.all())
+            - float(acct.cost_paid or 0)
+        )
 
         cards.append({
             "account": acct,
@@ -93,6 +153,7 @@ def dashboard():
             "risk_warning": warning,
             "trade_count": trade_count,
             "win_rate": win_rate,
+            "net_performance": net_performance,
         })
 
     firms = Firm.query.order_by(Firm.name).all()
@@ -107,7 +168,9 @@ def dashboard():
 @login_required
 def new_account():
     firms = Firm.query.order_by(Firm.name).all()
-    distributions = Distribution.query.order_by(Distribution.name).all()
+    distributions = Distribution.query.filter(
+        or_(Distribution.user_id.is_(None), Distribution.user_id == current_user.id)
+    ).order_by(Distribution.name).all()
 
     if request.method == "POST":
         f = request.form
@@ -187,6 +250,16 @@ def account_detail(account_id):
     acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
     trades = acct.trades.order_by(Trade.opened_at.desc()).all()
     payouts = acct.payouts.order_by(Payout.requested_at.desc()).all()
+    bots = Bot.query.filter_by(user_id=current_user.id, active=True).order_by(Bot.name).all()
+    daily_results = acct.daily_results.order_by(DailyResult.trade_date.desc()).all()
+    latest_event_date = _latest_ledger_date(acct)
+    editable_daily_result = next(
+        (result for result in daily_results
+         if result.source == "MANUAL" and result.trade_date == latest_event_date),
+        None,
+    )
+    open_trade_days = _open_trade_dates(acct)
+    latest_open_trade_day = min(open_trade_days) if open_trade_days else None
 
     r = room(float(acct.current_balance), float(acct.max_loss_limit))
     risk = float(acct.current_risk) if acct.current_risk else None
@@ -197,26 +270,71 @@ def account_detail(account_id):
     warning = (check_risk_warning(risk, float(acct.current_balance),
                                    float(acct.max_loss_limit)) if risk else False)
 
-    # Replay trades oldest-first to build equity curve
+    # Replay daily results, open trades, and payouts to keep the curve aligned with balance.
     equity_points = []
     floor_points = []
-    bal = float(acct.starting_balance)
-    pk = bal
-    fl = bal - float(acct.drawdown_amount)
+    results_by_day = {result.trade_date: result for result in daily_results}
+    trades_by_day = {}
+    for trade in trades:
+        trade_day = (trade.closed_at or trade.opened_at).date()
+        trades_by_day.setdefault(trade_day, []).append(trade)
+    payouts_by_day = {}
+    for payout in payouts:
+        payout_day = payout.requested_at.date()
+        payouts_by_day[payout_day] = payouts_by_day.get(payout_day, 0) + float(payout.gross)
+
+    all_days = set(results_by_day) | set(trades_by_day) | set(payouts_by_day)
+    ordered_results = sorted(daily_results, key=lambda result: result.trade_date)
+    if ordered_results:
+        first_result = ordered_results[0]
+        bal = float(first_result.balance_before)
+        pk = float(first_result.peak_before)
+        fl = float(first_result.floor_before)
+    else:
+        total_trade_pnl = sum(float(trade.pnl) for trade in trades)
+        total_daily_pnl = sum(float(result.pnl) for result in daily_results)
+        total_payouts = sum(float(payout.gross) for payout in payouts)
+        bal = float(acct.current_balance) - total_trade_pnl - total_daily_pnl + total_payouts
+        pk = bal
+        fl = float(acct.starting_balance) - float(acct.drawdown_amount)
     lock = float(acct.lock_threshold)
     equity_points.append({"t": acct.opened_at.isoformat(), "v": bal})
     floor_points.append({"t": acct.opened_at.isoformat(), "v": fl})
 
-    for trade in reversed(list(trades)):
-        bal += float(trade.pnl)
-        if fl < lock:
-            if bal > pk:
-                pk = bal
-            candidate = pk - float(acct.drawdown_amount)
-            fl = min(candidate, lock)
-        ts = (trade.closed_at or trade.opened_at).isoformat()
-        equity_points.append({"t": ts, "v": round(bal, 2)})
-        floor_points.append({"t": ts, "v": round(fl, 2)})
+    for trade_day in sorted(all_days):
+        day_trades = sorted(trades_by_day.get(trade_day, []),
+                            key=lambda trade: trade.closed_at or trade.opened_at)
+        day_result = results_by_day.get(trade_day)
+        if day_trades:
+            for trade in day_trades:
+                bal += float(trade.pnl)
+                if acct.drawdown_type == DrawdownType.INTRADAY_TRAILING:
+                    pk, fl = update_eod_floor(
+                        bal, pk, fl, float(acct.drawdown_amount), lock)
+                timestamp = (trade.closed_at or trade.opened_at).isoformat()
+                equity_points.append({"t": timestamp, "v": round(bal, 2)})
+                floor_points.append({"t": timestamp, "v": round(fl, 2)})
+        elif day_result:
+            bal += float(day_result.pnl)
+
+        close_time = datetime.combine(trade_day, datetime.max.time(), tzinfo=timezone.utc).isoformat()
+        if day_result and acct.drawdown_type == DrawdownType.EOD_TRAILING:
+            pk, fl = update_eod_floor(bal, pk, fl,
+                                      float(acct.drawdown_amount), lock)
+        if not day_trades or day_result:
+            equity_points.append({"t": close_time, "v": round(bal, 2)})
+            floor_points.append({"t": close_time, "v": round(fl, 2)})
+
+        payout = payouts_by_day.get(trade_day, 0)
+        if payout:
+            bal -= payout
+            equity_points.append({"t": close_time, "v": round(bal, 2)})
+            floor_points.append({"t": close_time, "v": round(fl, 2)})
+
+    if abs(bal - float(acct.current_balance)) > 0.01:
+        now = datetime.now(timezone.utc).isoformat()
+        equity_points.append({"t": now, "v": float(acct.current_balance)})
+        floor_points.append({"t": now, "v": float(acct.max_loss_limit)})
 
     trade_count = len(trades)
     win_count = sum(1 for t in trades if float(t.pnl) > 0)
@@ -227,6 +345,12 @@ def account_detail(account_id):
         account=acct,
         trades=trades,
         payouts=payouts,
+        bots=bots,
+        daily_results=daily_results,
+        editable_daily_result=editable_daily_result,
+        today=date.today(),
+        latest_open_trade_day=latest_open_trade_day,
+        open_trade_day_count=len(open_trade_days),
         room=r,
         losses_survivable=survivable,
         ladder=ladder,
@@ -247,8 +371,8 @@ def account_detail(account_id):
 def add_trade(account_id):
     acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
 
-    if acct.phase == Phase.BREACHED:
-        flash("Cannot add trades to a breached account.", "error")
+    if acct.phase in (Phase.BREACHED, Phase.PASSED):
+        flash("Cannot add trades to a closed account.", "error")
         return redirect(url_for("accounts.account_detail", account_id=account_id))
 
     f = request.form
@@ -262,12 +386,35 @@ def add_trade(account_id):
         qty = int(f["quantity"]) if f.get("quantity") else None
         signal_price = float(f["signal_price"]) if f.get("signal_price") else None
         fill_price = float(f["fill_price"]) if f.get("fill_price") else None
+        bot_id = int(f["bot_id"]) if f.get("bot_id") else None
     except ValueError as e:
         flash("Invalid input: {}".format(e), "error")
         return redirect(url_for("accounts.account_detail", account_id=account_id))
 
+    if not math.isfinite(pnl) or opened_at.date() > datetime.now(timezone.utc).date():
+        flash("P&L must be finite and the trade date cannot be in the future.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    if DailyResult.query.filter_by(account_id=acct.id, trade_date=opened_at.date()).first():
+        flash("This day is already finalized. Use a new date or correct the daily result.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+    latest_closed_date = max((result.trade_date for result in acct.daily_results.all()), default=None)
+    latest_payout_date = max((payout.requested_at.date() for payout in acct.payouts.all()), default=None)
+    if ((latest_closed_date and opened_at.date() <= latest_closed_date)
+            or (latest_payout_date and opened_at.date() <= latest_payout_date)):
+        flash("Trades must follow the latest finalized day and payout date.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    bot = None
+    if bot_id:
+        bot = Bot.query.filter_by(id=bot_id, user_id=current_user.id, active=True).first()
+        if not bot:
+            flash("Select one of your active bots.", "error")
+            return redirect(url_for("accounts.account_detail", account_id=account_id))
+
     trade = Trade(
         account_id=acct.id,
+        bot_id=bot.id if bot else None,
         opened_at=opened_at,
         direction=direction,
         signal_price=signal_price,
@@ -278,18 +425,161 @@ def add_trade(account_id):
     )
     db.session.add(trade)
     acct.current_balance = float(acct.current_balance) + pnl
-    _apply_eod_floor(acct)
-    _check_phase_after_trade(acct)
+    if acct.drawdown_type != DrawdownType.EOD_TRAILING:
+        if acct.drawdown_type == DrawdownType.INTRADAY_TRAILING:
+            _apply_eod_floor(acct)
+        _check_phase_after_trade(acct)
 
     _log(ActivityKind.TRADE,
          "Trade: {} ${:+.2f} -> balance ${:.2f}".format(
              "WIN" if pnl > 0 else "LOSS", pnl, float(acct.current_balance)),
          account=acct,
          payload={"pnl": pnl, "balance_after": float(acct.current_balance),
-                  "floor_after": float(acct.max_loss_limit)})
+                  "floor_after": float(acct.max_loss_limit),
+                  "bot_id": bot.id if bot else None})
 
     db.session.commit()
     flash("Trade logged: ${:+.2f}".format(pnl), "success" if pnl > 0 else "error")
+    return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+
+@bp.route("/accounts/<int:account_id>/daily-result", methods=["POST"])
+@login_required
+def save_daily_result(account_id):
+    acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
+    if acct.phase in (Phase.BREACHED, Phase.PASSED):
+        flash("This account is closed and cannot accept more results.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    try:
+        trade_date = date.fromisoformat(request.form.get("trade_date", ""))
+        pnl = float(request.form.get("pnl", ""))
+        bot_id = int(request.form["bot_id"]) if request.form.get("bot_id") else None
+    except (ValueError, TypeError):
+        flash("Enter a valid date and dollar P&L amount.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    if trade_date > datetime.now(timezone.utc).date():
+        flash("A daily result cannot be dated in the future.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+    if not math.isfinite(pnl):
+        flash("P&L must be a finite dollar amount.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    bot = None
+    if bot_id:
+        bot = Bot.query.filter_by(id=bot_id, user_id=current_user.id, active=True).first()
+        if not bot:
+            flash("Select one of your active bots.", "error")
+            return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    result = DailyResult.query.filter_by(account_id=acct.id, trade_date=trade_date).first()
+    if Trade.query.filter(
+        Trade.account_id == acct.id,
+        db.func.date(db.func.coalesce(Trade.closed_at, Trade.opened_at)) == trade_date,
+    ).first():
+        flash("This date has individual trades. Close those trades instead of adding a daily total.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    if result and result.source != "MANUAL":
+        flash("This result was calculated from trades and cannot be edited here.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    latest_date = _latest_ledger_date(
+        acct,
+        exclude_daily_result_id=result.id if result else None,
+    )
+    if result:
+        if latest_date and latest_date >= trade_date:
+            flash("Only the latest trading day can be corrected. Later activity is already recorded.", "error")
+            return redirect(url_for("accounts.account_detail", account_id=account_id))
+        _restore_daily_snapshot(acct, result)
+        result.pnl = pnl
+        result.bot_id = bot.id if bot else None
+        result.notes = request.form.get("notes", "").strip() or None
+    else:
+        if _open_trade_dates(acct):
+            flash("Close unclosed trade days before entering a daily total.", "error")
+            return redirect(url_for("accounts.account_detail", account_id=account_id))
+        if latest_date and trade_date <= latest_date:
+            flash("Record daily results in date order; older days cannot be inserted after later activity.", "error")
+            return redirect(url_for("accounts.account_detail", account_id=account_id))
+        result = DailyResult(
+            account_id=acct.id,
+            bot_id=bot.id if bot else None,
+            trade_date=trade_date,
+            pnl=pnl,
+            source="MANUAL",
+            notes=request.form.get("notes", "").strip() or None,
+            balance_before=acct.current_balance,
+            peak_before=acct.peak_balance,
+            floor_before=acct.max_loss_limit,
+            best_day_before=acct.best_day_so_far,
+            phase_before=acct.phase.name,
+            closed_at_before=acct.closed_at,
+        )
+        db.session.add(result)
+
+    _apply_daily_close(acct, pnl)
+    acct.best_day_so_far = max(float(acct.best_day_so_far), pnl)
+    _log(
+        ActivityKind.NOTE,
+        "Daily result {}: ${:+.2f} -> balance ${:.2f}".format(
+            trade_date.isoformat(), pnl, float(acct.current_balance)),
+        account=acct,
+        payload={"trade_date": trade_date.isoformat(), "pnl": pnl,
+                 "balance_after": float(acct.current_balance), "bot_id": bot.id if bot else None},
+    )
+    db.session.commit()
+    flash("Daily result saved: ${:+,.2f}. You can edit this latest day.".format(pnl), "success")
+    return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+
+@bp.route("/accounts/<int:account_id>/close-day", methods=["POST"])
+@login_required
+def close_trading_day(account_id):
+    acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
+    if acct.phase in (Phase.BREACHED, Phase.PASSED):
+        flash("This account is closed.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+    open_dates = sorted(_open_trade_dates(acct))
+    if not open_dates:
+        flash("There are no unclosed trading days.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+    if any(payout.requested_at.date() >= open_dates[0] for payout in acct.payouts.all()):
+        flash("A payout was recorded after an unclosed trade day. Contact support before closing it.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    all_trades = acct.trades.all()
+    day_pnls = {
+        trade_date: sum(float(trade.pnl) for trade in all_trades
+                        if (trade.closed_at or trade.opened_at).date() == trade_date)
+        for trade_date in open_dates
+    }
+    acct.current_balance = float(acct.current_balance) - sum(day_pnls.values())
+    for trade_date in open_dates:
+        pnl = day_pnls[trade_date]
+        result = DailyResult(
+            account_id=acct.id,
+            trade_date=trade_date,
+            pnl=pnl,
+            source="TRADES",
+            balance_before=acct.current_balance,
+            peak_before=acct.peak_balance,
+            floor_before=acct.max_loss_limit,
+            best_day_before=acct.best_day_so_far,
+            phase_before=acct.phase.name,
+            closed_at_before=acct.closed_at,
+        )
+        db.session.add(result)
+        acct.current_balance = float(acct.current_balance) + pnl
+        _apply_daily_close(acct, 0)
+        acct.best_day_so_far = max(float(acct.best_day_so_far), pnl)
+        _log(ActivityKind.NOTE, "Trading day {} closed: ${:+.2f}".format(trade_date, pnl),
+             account=acct,
+             payload={"trade_date": trade_date.isoformat(), "pnl": pnl, "source": "TRADES"})
+    db.session.commit()
+    flash("{} trading day(s) closed. EOD floor and account phase updated.".format(len(open_dates)), "success")
     return redirect(url_for("accounts.account_detail", account_id=account_id))
 
 
@@ -303,6 +593,10 @@ def add_payout(account_id):
     acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
     f = request.form
 
+    if _open_trade_dates(acct):
+        flash("Close unclosed trading days before recording a payout.", "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
     try:
         gross = float(f["gross"])
         split = float(f.get("profit_split") or 0.9)
@@ -310,6 +604,12 @@ def add_payout(account_id):
         balance_after = float(acct.current_balance) - gross
     except ValueError as e:
         flash("Invalid input: {}".format(e), "error")
+        return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+    if (not math.isfinite(gross) or not math.isfinite(split)
+            or gross <= 0 or not 0 < split <= 1
+            or gross >= float(acct.current_balance) - float(acct.max_loss_limit)):
+        flash("Payout must be positive, within the available balance above the floor, and use a valid split.", "error")
         return redirect(url_for("accounts.account_detail", account_id=account_id))
 
     payout = Payout(account_id=acct.id, gross=gross, net=net, balance_after=balance_after)

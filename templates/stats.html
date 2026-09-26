@@ -39,6 +39,7 @@
   </div>
   {% endif %}
 </div>
+<p class="panel-note">Total P&amp;L includes manual daily results. Win rate and trade counts use individual trade records only.</p>
 
 {# ─── Per-account ─── #}
 <div class="panel">
@@ -52,6 +53,7 @@
         <th class="num-col">Wins</th>
         <th class="num-col">Losses</th>
         <th class="num-col">Win rate</th>
+        <th class="num-col">Recorded P&amp;L</th>
       </tr>
     </thead>
     <tbody>
@@ -67,6 +69,7 @@
           {{ "%.1f"|format(row.win_rate) }}%
           {% else %}—{% endif %}
         </td>
+        <td class="num {% if row.pnl > 0 %}text-profit{% elif row.pnl < 0 %}text-loss{% endif %}">${{ "{:+,.2f}".format(row.pnl) }}</td>
       </tr>
       {% endfor %}
     </tbody>

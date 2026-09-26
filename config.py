@@ -29,7 +29,14 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = _db_url
 
 
+class TestingConfig(Config):
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite://"
+    RATELIMIT_ENABLED = False
+
+
 config_map = {
     "development": DevelopmentConfig,
     "production": ProductionConfig,
+    "testing": TestingConfig,
 }

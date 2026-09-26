@@ -38,9 +38,10 @@
   {% set phase_val = acct.phase.value %}
   {% set is_breached = phase_val == 'BREACHED' %}
   {% set is_passed = phase_val == 'PASSED' %}
+    {% set show_performance_outline = not is_breached and not is_passed %}
 
   <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}"
-     class="account-card {% if is_breached %}account-card--breached{% elif is_passed %}account-card--passed{% elif card.risk_warning %}account-card--warning{% endif %}">
+      class="account-card {% if is_breached %}account-card--breached{% elif is_passed %}account-card--passed{% elif card.risk_warning %}account-card--warning{% endif %} {% if show_performance_outline and card.net_performance > 0 %}account-card--winning{% elif show_performance_outline and card.net_performance < 0 %}account-card--losing{% endif %}">
 
     <div class="card-header">
       <div class="card-firm">
@@ -139,6 +140,9 @@
       {% if card.win_rate is not none %}
       <span class="card-winrate num">{{ "%.0f"|format(card.win_rate) }}% WR</span>
       {% endif %}
+      <span class="card-performance num {% if card.net_performance > 0 %}text-profit{% elif card.net_performance < 0 %}text-loss{% endif %}">
+        {{ "{:+,.0f}".format(card.net_performance) }} net
+      </span>
     </div>
 
   </a>

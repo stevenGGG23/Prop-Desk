@@ -407,37 +407,134 @@ function initCsvUpload() {
 
   const resultEl = document.getElementById('csv-upload-result');
   const btn      = form.querySelector('button[type="submit"]');
+  let confirmReady = false;
 
-  form.addEventListener('submit', function(e) {
+  function resetPreview() {
+    confirmReady = false;
+    btn.textContent = 'Preview CSV';
+    if (resultEl) resultEl.textContent = '';
+  }
+
+  form.addEventListener('input', resetPreview);
+  form.addEventListener('change', resetPreview);
+
+  form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const fd = new FormData(form);
+    const importing = confirmReady;
+    fd.set('confirm_import', importing ? '1' : '0');
     setLoading(btn, true);
-    if (resultEl) resultEl.innerHTML = '';
-
-    fetch('/api/import-csv', { method: 'POST', body: fd })
-      .then(res => res.json())
-      .then(data => {
-        setLoading(btn, false);
-        if (data.error) {
-          if (resultEl) resultEl.innerHTML = '<span class="text-red">' + escHtml(data.error) + '</span>';
-          return;
-        }
-        let msg = 'Imported ' + data.imported + ' trades.';
-        if (data.errors && data.errors.length) {
-          msg += ' (' + data.errors.length + ' errors)';
-        }
-        if (resultEl) resultEl.innerHTML = '<span class="text-accent">' + escHtml(msg) + '</span>';
-        if (data.new_balance !== undefined) {
-          const balEl = document.getElementById('account-balance-display');
-          if (balEl) balEl.textContent = '$' + data.new_balance.toLocaleString('en-US', {minimumFractionDigits: 2});
-        }
-      })
-      .catch(err => {
-        setLoading(btn, false);
-        if (resultEl) resultEl.innerHTML = '<span class="text-red">' + escHtml(err.message) + '</span>';
-      });
+    try {
+      const response = await fetch('/api/import-csv', { method: 'POST', body: fd });
+      const data = await response.json();
+      setLoading(btn, false);
+      if (data.error && !data.preview) {
+        if (resultEl) resultEl.innerHTML = '<p class="text-loss">' + escHtml(data.error) + '</p>';
+        confirmReady = false;
+        btn.textContent = 'Preview CSV';
+        return;
+      }
+      if (data.preview) {
+        const errorList = (data.errors || []).map(row =>
+          '<li>Row ' + escHtml(row.row) + ': ' + escHtml(row.error) + '</li>'
+        ).join('');
+        const rows = (data.sample || []).map(row =>
+          '<tr><td>' + escHtml(row.date.slice(0, 10)) + '</td><td class="num">$' +
+          Number(row.pnl).toLocaleString('en-US', {minimumFractionDigits: 2}) +
+          '</td><td>' + escHtml(row.direction || '—') + '</td><td>' +
+          escHtml(row.quantity == null ? '—' : row.quantity) + '</td></tr>'
+        ).join('');
+        if (resultEl) resultEl.innerHTML =
+          '<p>' + data.count + ' new trade(s); ' + (data.duplicates || 0) + ' duplicate(s) skipped. Net P&amp;L: $' +
+          Number(data.net_pnl).toLocaleString('en-US', {minimumFractionDigits: 2}) +
+          '. Projected account balance: $' + Number(data.projected_balance).toLocaleString('en-US', {minimumFractionDigits: 2}) + '.</p>' +
+          (errorList ? '<ul class="import-errors">' + errorList + '</ul>' : '') +
+          (rows ? '<div class="table-scroll"><table class="table"><thead><tr><th>Date</th><th class="num-col">P&amp;L</th><th>Side</th><th>Qty</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '');
+        confirmReady = data.count > 0 && !(data.errors || []).length;
+        btn.textContent = confirmReady ? 'Import ' + data.count + ' trades' : 'Preview CSV';
+      } else {
+        confirmReady = false;
+        btn.textContent = 'Preview CSV';
+        const dayMessage = data.closed_days
+          ? 'closed ' + data.closed_days + ' day(s).'
+          : 'left included day(s) open for more fills.';
+        if (resultEl) resultEl.innerHTML =
+          '<p class="text-profit">Imported ' + data.imported + ' trade(s), ' + dayMessage +
+          ' New balance: $' + Number(data.new_balance).toLocaleString('en-US',
+          {minimumFractionDigits: 2}) + '.</p><a class="link" href="/accounts/' +
+          encodeURIComponent(fd.get('account_id')) + '">Open account</a>';
+      }
+    } catch (err) {
+      setLoading(btn, false);
+      confirmReady = false;
+      btn.textContent = 'Preview CSV';
+      if (resultEl) resultEl.innerHTML = '<p class="text-loss">' + escHtml(err.message) + '</p>';
+    }
   });
 }
+
+function initDistributionUpload() {
+  const form = document.getElementById('distribution-upload-form');
+  if (!form) return;
+
+  const resultEl = document.getElementById('distribution-upload-result');
+  const btn = form.querySelector('button[type="submit"]');
+  let confirmReady = false;
+
+  function resetPreview() {
+    confirmReady = false;
+    btn.textContent = 'Preview backtest';
+    if (resultEl) resultEl.textContent = '';
+  }
+
+  form.addEventListener('input', resetPreview);
+  form.addEventListener('change', resetPreview);
+  form.addEventListener('submit', async function(event) {
+    event.preventDefault();
+    const importing = confirmReady;
+    const data = new FormData(form);
+    data.set('confirm_import', importing ? '1' : '0');
+    setLoading(btn, true);
+    try {
+      const response = await fetch('/api/import-distribution', { method: 'POST', body: data });
+      const result = await response.json();
+      setLoading(btn, false);
+      if (result.error && !result.preview) {
+        if (resultEl) resultEl.innerHTML = '<p class="text-loss">' + escHtml(result.error) + '</p>';
+        confirmReady = false;
+        btn.textContent = 'Preview backtest';
+        return;
+      }
+      if (result.preview) {
+        const errors = (result.errors || []).map(row =>
+          '<li>Row ' + escHtml(row.row) + ': ' + escHtml(row.error) + '</li>'
+        ).join('');
+        const rate = result.count ? (result.wins / result.count * 100).toFixed(1) : '0.0';
+        if (resultEl) resultEl.innerHTML = '<p>' + result.count + ' outcomes · ' + result.wins +
+          ' wins · ' + result.losses + ' losses · ' + rate + '% win rate.</p>' +
+          (errors ? '<ul class="import-errors">' + errors + '</ul>' : '');
+        confirmReady = result.count > 1 && result.wins > 0 && result.losses > 0 && !errors;
+        btn.textContent = confirmReady ? 'Create distribution and link account' : 'Preview backtest';
+      } else {
+        confirmReady = false;
+        btn.textContent = 'Preview backtest';
+        if (resultEl) resultEl.innerHTML = '<p class="text-profit">Created ' + escHtml(result.distribution) +
+          ' · ' + result.win_rate + '% win rate. The account is linked; live balance was not changed.</p>';
+      }
+    } catch (error) {
+      setLoading(btn, false);
+      confirmReady = false;
+      btn.textContent = 'Preview backtest';
+      if (resultEl) resultEl.innerHTML = '<p class="text-loss">' + escHtml(error.message) + '</p>';
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initFlashDismiss();
+  initCsvUpload();
+  initDistributionUpload();
+});
 
 // ---------------------------------------------------------
 // Utility

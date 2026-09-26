@@ -48,6 +48,22 @@
          class="nav-link {% if request.endpoint == 'log.activity_log' %}is-active{% endif %}">
         Log
       </a>
+      <a href="{{ url_for('bots.index') }}"
+         class="nav-link {% if request.endpoint in ['bots.index', 'bots.add_event'] %}is-active{% endif %}">
+        Bots
+      </a>
+      <a href="{{ url_for('api.imports_page') }}"
+         class="nav-link {% if request.endpoint == 'api.imports_page' %}is-active{% endif %}">
+        Import
+      </a>
+      <a href="{{ url_for('calendar.month_view') }}"
+         class="nav-link {% if request.endpoint == 'calendar.month_view' %}is-active{% endif %}">
+        Calendar
+      </a>
+      <a href="{{ url_for('projections.index') }}"
+         class="nav-link {% if request.endpoint == 'projections.index' %}is-active{% endif %}">
+        Projections
+      </a>
     </div>
   </div>
   <div class="nav-right">

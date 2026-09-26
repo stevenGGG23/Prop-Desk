@@ -3,7 +3,7 @@ from collections import defaultdict
 from flask import Blueprint, render_template
 from flask_login import login_required, current_user
 
-from models import Account, Trade, Phase
+from models import Account, DailyResult, Trade, Phase
 
 bp = Blueprint("stats", __name__)
 
@@ -87,6 +87,19 @@ def stats():
 
     # Total pnl
     total_pnl = sum(float(x["trade"].pnl) for x in all_trades)
+    manual_daily_results = (DailyResult.query
+                            .join(Account)
+                            .filter(Account.user_id == current_user.id,
+                                    DailyResult.source == "MANUAL")
+                            .all())
+    total_pnl += sum(float(result.pnl) for result in manual_daily_results)
+    manual_pnl_by_account = defaultdict(float)
+    for result in manual_daily_results:
+        manual_pnl_by_account[result.account_id] += float(result.pnl)
+
+    for row in per_account:
+        row["pnl"] = sum(float(t.pnl) for t in row["account"].trades.all())
+        row["pnl"] += manual_pnl_by_account[row["account"].id]
     avg_win = (sum(float(x["trade"].pnl) for x in wins) / len(wins)) if wins else None
     avg_loss = (sum(float(x["trade"].pnl) for x in losses) / len(losses)) if losses else None
 
@@ -101,4 +114,5 @@ def stats():
         avg_entry_slippage=avg_entry_slippage,
         avg_win=avg_win,
         avg_loss=avg_loss,
+        manual_daily_count=len(manual_daily_results),
     )
