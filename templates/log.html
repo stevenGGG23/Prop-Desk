@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Activity Log — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Activity log</h1>
+  <span class="page-sub">Append-only. Every trade, setting change, payout, and phase transition.</span>
+</div>
+
+{# ─── Filters ─── #}
+<form method="GET" class="filter-bar">
+  <select class="input input--sm" name="kind">
+    <option value="">All types</option>
+    {% for kind in kinds %}
+    <option value="{{ kind }}" {% if kind == kind_filter %}selected{% endif %}>{{ kind }}</option>
+    {% endfor %}
+  </select>
+  <select class="input input--sm" name="account_id">
+    <option value="">All accounts</option>
+    {% for acct in accounts %}
+    <option value="{{ acct.id }}" {% if acct.id == account_filter %}selected{% endif %}>{{ acct.nickname }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn--ghost btn--sm">Filter</button>
+  <a href="{{ url_for('log.activity_log') }}" class="btn btn--ghost btn--sm">Clear</a>
+</form>
+
+{% if entries.items %}
+<div class="log-list">
+  {% for entry in entries.items %}
+  <div class="log-entry log-entry--{{ entry.kind.value.lower() }}">
+    <div class="log-entry-meta">
+      <span class="log-kind log-kind--{{ entry.kind.value.lower() }}">{{ entry.kind.value }}</span>
+      <span class="log-time num">{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+      {% if entry.account %}
+      <a href="{{ url_for('accounts.account_detail', account_id=entry.account_id) }}" class="log-account">{{ entry.account.nickname }}</a>
+      {% endif %}
+    </div>
+    <div class="log-message">{{ entry.message }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="pagination">
+  {% if entries.has_prev %}
+  <a href="{{ url_for('log.activity_log', page=entries.prev_num, kind=kind_filter, account_id=account_filter) }}" class="btn btn--ghost btn--sm">Previous</a>
+  {% endif %}
+  <span class="pagination-info">Page {{ entries.page }} of {{ entries.pages }}</span>
+  {% if entries.has_next %}
+  <a href="{{ url_for('log.activity_log', page=entries.next_num, kind=kind_filter, account_id=account_filter) }}" class="btn btn--ghost btn--sm">Next</a>
+  {% endif %}
+</div>
+
+{% else %}
+<div class="empty-state">
+  <p>No activity yet.</p>
+</div>
+{% endif %}
+
+{% endblock %}

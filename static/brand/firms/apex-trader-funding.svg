@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Apex Trader Funding">
+  <rect width="120" height="120" rx="16" fill="#0f172a"/>
+  <!-- Stylized arrow/A shape pointing up -->
+  <path d="M60 18 L90 90 L74 90 L60 55 L46 90 L30 90 Z" fill="white"/>
+  <path d="M42 72 L78 72" stroke="#0f172a" stroke-width="10"/>
+</svg>

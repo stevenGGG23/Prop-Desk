@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Take Profit Trader">
+  <rect width="120" height="120" rx="16" fill="#1a1a1a"/>
+  <!-- Candle chart with up and down -->
+  <rect x="32" y="30" width="14" height="42" rx="2" fill="#16a34a"/>
+  <line x1="39" y1="18" x2="39" y2="30" stroke="#16a34a" stroke-width="3"/>
+  <line x1="39" y1="72" x2="39" y2="84" stroke="#16a34a" stroke-width="3"/>
+  <rect x="72" y="48" width="14" height="38" rx="2" fill="#dc2626"/>
+  <line x1="79" y1="36" x2="79" y2="48" stroke="#dc2626" stroke-width="3"/>
+  <line x1="79" y1="86" x2="79" y2="98" stroke="#dc2626" stroke-width="3"/>
+</svg>

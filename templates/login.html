@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — Prop Desk</title>
+  <link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+  <link rel="icon" href="/static/brand/logo-mark.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0b0e13">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="login-body">
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <svg viewBox="0 0 63.5 63.5" width="48" height="48" aria-label="Prop Desk">
+        <g transform="translate(-1.25 -0.375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 53 H50" stroke="#64748b" stroke-width="6"/>
+          <path d="M10 41 H26 V28 H42 V13 H56" stroke="#06b6d4" stroke-width="9.5"/>
+        </g>
+      </svg>
+      <span class="login-wordmark">Prop Desk</span>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash--{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if error %}
+    <div class="flash flash--error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" class="login-form">
+      <div class="field">
+        <label class="label" for="username">Username</label>
+        <input class="input" type="text" id="username" name="username"
+               autocomplete="username" autofocus required>
+      </div>
+      <div class="field">
+        <label class="label" for="password">Password</label>
+        <input class="input" type="password" id="password" name="password"
+               autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn--primary btn--full">Sign in</button>
+    </form>
+  </div>
+</div>
+
+</body>
+</html>

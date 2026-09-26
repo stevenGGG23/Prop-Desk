@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Advisor — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Daily advisor</h1>
+  <span class="page-sub">Risk recommendations for today's session</span>
+</div>
+
+{% if not recommendations %}
+<div class="empty-state">
+  <p>No active accounts.</p>
+</div>
+{% else %}
+
+{% for rec in recommendations %}
+{% set acct = rec.account %}
+<div class="advisor-card {% if rec.risk_warning %}advisor-card--warning{% endif %}">
+
+  <div class="advisor-card-header">
+    <div class="advisor-firm-row">
+      {% if acct.firm.logo_filename %}
+      <img src="{{ url_for('static', filename='brand/firms/' + acct.firm.logo_filename) }}"
+           alt="{{ acct.firm.name }}" class="firm-logo-md"
+           onerror="this.style.display='none'">
+      {% endif %}
+      <div>
+        <h2 class="advisor-account-name">{{ acct.nickname }}</h2>
+        <span class="advisor-firm-name">{{ acct.firm.name }}</span>
+      </div>
+    </div>
+    <div class="advisor-metrics">
+      <div class="metric">
+        <span class="metric-value num">${{ "{:,.2f}".format(acct.current_balance|float) }}</span>
+        <span class="metric-label">Balance</span>
+      </div>
+      <div class="metric {% if rec.room < 1500 %}metric--danger{% endif %}">
+        <span class="metric-value num">${{ "{:,.0f}".format(rec.room) }}</span>
+        <span class="metric-label">Room</span>
+      </div>
+    </div>
+  </div>
+
+  {% if rec.risk_warning %}
+  <div class="risk-warning-banner" style="margin: .75rem 0;">
+    Current risk (${{ "{:,.0f}".format(rec.current_risk) }}) is above the 3-loss threshold (${{ "{:,.0f}".format(rec.safe_risk) }}).
+    Reduce before trading today.
+  </div>
+  {% endif %}
+
+  <div class="advisor-ladder">
+    <h3 class="advisor-section-label">Risk ladder — pick your cushion</h3>
+    <div class="ladder-table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Losses you survive</th>
+            <th class="num-col">Max risk ($)</th>
+            <th class="num-col">Speed vs conservative</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rec.ladder %}
+          <tr {% if loop.index == 2 %}class="ladder-row--highlight"{% endif %}>
+            <td class="num">{{ row.n }}</td>
+            <td class="num">
+              ${{ "{:,.0f}".format(row.max_risk) }}
+              {% if rec.current_risk and rec.current_risk == row.max_risk|round(0)|int %}
+              <span class="current-badge">current</span>
+              {% endif %}
+            </td>
+            <td class="num">
+              {% if loop.index == rec.ladder|length %}—
+              {% else %}
+                {% set base = rec.ladder[-1].max_risk %}
+                {% if base > 0 %}{{ "%.0f"|format(row.max_risk / base * 100 - 100) }}% faster{% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="advisor-actions">
+    <div class="advisor-action-box">
+      <span class="advisor-action-label">After a win → safe risk becomes</span>
+      <span class="advisor-action-value num">
+        {% if rec.risk_after_win %}${{ "{:,.0f}".format(rec.risk_after_win) }}{% else %}—{% endif %}
+      </span>
+    </div>
+    <div class="advisor-action-box">
+      <span class="advisor-action-label">After a loss → safe risk becomes</span>
+      <span class="advisor-action-value num {% if rec.risk_after_loss and rec.risk_after_loss < 500 %}metric-value--danger{% endif %}">
+        {% if rec.risk_after_loss %}${{ "{:,.0f}".format(rec.risk_after_loss) }}{% else %}—{% endif %}
+      </span>
+    </div>
+    <div class="advisor-action-box">
+      <span class="advisor-action-label">Floor status</span>
+      <span class="advisor-action-value">
+        {% if rec.floor_locked %}
+        <span class="text-profit">Locked — full safety</span>
+        {% else %}
+        Locks at ${{ "{:,.0f}".format(rec.floor_lock_balance) }}
+        {% endif %}
+      </span>
+    </div>
+  </div>
+
+  <div class="advisor-set-risk">
+    <form method="POST" action="{{ url_for('accounts.update_risk', account_id=acct.id) }}"
+          class="inline-form">
+      <input class="input num" type="number" name="risk" step="50"
+             value="{{ rec.safe_risk|round(0)|int }}" style="width:120px;">
+      <button type="submit" class="btn btn--ghost btn--sm">Set risk</button>
+    </form>
+  </div>
+
+</div>
+{% endfor %}
+
+{% endif %}
+{% endblock %}

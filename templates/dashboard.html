@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Portfolio — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title">Portfolio</h1>
+    <span class="page-sub">{{ cards|length }} account{{ 's' if cards|length != 1 else '' }}</span>
+  </div>
+  <div class="page-header-right">
+    {% if cards %}
+    <div id="portfolio-risk-container" class="num" style="font-size:13px;color:var(--ink-dim);">
+      <span class="spinner"></span>
+    </div>
+    {% endif %}
+    <a href="{{ url_for('accounts.new_account') }}" class="btn btn--primary">+ Add account</a>
+  </div>
+</div>
+
+{% if not cards %}
+<div class="empty-state">
+  <svg viewBox="0 0 63.5 63.5" width="56" height="56" style="margin: 0 auto 16px;" aria-hidden="true">
+    <g transform="translate(-1.25 -0.375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 53 H50" stroke="#222c3a" stroke-width="6"/>
+      <path d="M10 41 H26 V28 H42 V13 H56" stroke="#222c3a" stroke-width="9.5"/>
+    </g>
+  </svg>
+  <p style="margin-bottom:6px;">No accounts yet.</p>
+  <p class="text-dim" style="font-size:12px;margin-bottom:20px;">Add your first prop firm account to start tracking.</p>
+  <a href="{{ url_for('accounts.new_account') }}" class="btn btn--primary">Add your first account</a>
+</div>
+
+{% else %}
+
+<div class="account-grid">
+  {% for card in cards %}
+  {% set acct = card.account %}
+  {% set phase_val = acct.phase.value %}
+  {% set is_breached = phase_val == 'BREACHED' %}
+  {% set is_passed = phase_val == 'PASSED' %}
+
+  <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}"
+     class="account-card {% if is_breached %}account-card--breached{% elif is_passed %}account-card--passed{% elif card.risk_warning %}account-card--warning{% endif %}">
+
+    <div class="card-header">
+      <div class="card-firm">
+        {% if acct.firm.logo_filename %}
+        <img src="{{ url_for('static', filename='brand/firms/' + acct.firm.logo_filename) }}"
+             alt="{{ acct.firm.name }}"
+             class="firm-logo"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <span class="firm-logo-fallback" style="display:none;">{{ acct.firm.name[:2]|upper }}</span>
+        {% else %}
+        <span class="firm-logo-fallback">{{ acct.firm.name[:2]|upper }}</span>
+        {% endif %}
+        <span class="firm-name">{{ acct.firm.name }}</span>
+      </div>
+      <span class="phase-badge phase-badge--{{ phase_val|lower }}">{{ phase_val }}</span>
+    </div>
+
+    <div class="card-nickname">{{ acct.nickname }}</div>
+
+    <div class="card-balance">
+      <span class="balance-value num">${{ "{:,.2f}".format(acct.current_balance|float) }}</span>
+    </div>
+
+    {% if not is_breached %}
+    <div class="card-metrics">
+      <div class="metric">
+        <span class="metric-value num {% if card.room < 1000 %}metric-value--danger{% elif card.room < 2000 %}metric-value--warn{% endif %}">
+          ${{ "{:,.0f}".format(card.room) }}
+        </span>
+        <span class="metric-label">Room</span>
+      </div>
+
+      {% if card.losses_survivable is not none %}
+      <div class="metric">
+        <span class="metric-value num {% if card.losses_survivable <= 2 %}metric-value--danger{% elif card.losses_survivable == 3 %}metric-value--warn{% endif %}">
+          {{ card.losses_survivable }}
+        </span>
+        <span class="metric-label">Losses left</span>
+      </div>
+      {% endif %}
+
+      {% if acct.current_risk %}
+      <div class="metric">
+        <span class="metric-value num {% if card.risk_warning %}metric-value--danger{% endif %}">
+          ${{ "{:,.0f}".format(acct.current_risk|float) }}
+        </span>
+        <span class="metric-label">Risk{% if card.risk_warning %} !{% endif %}</span>
+      </div>
+      {% endif %}
+
+      {% if acct.profit_target and phase_val == 'EVAL' %}
+      <div class="metric">
+        {% set gained = acct.current_balance|float - acct.starting_balance|float %}
+        {% set pct = (gained / acct.profit_target|float * 100)|round(0)|int %}
+        <span class="metric-value num">{{ [pct, 0]|max }}%</span>
+        <span class="metric-label">To target</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if phase_val == 'EVAL' and acct.profit_target %}
+    {% set gained = acct.current_balance|float - acct.starting_balance|float %}
+    {% set pct_raw = gained / acct.profit_target|float * 100 %}
+    {% set pct_clamped = [[pct_raw, 0]|max, 100]|min %}
+    <div class="progress-bar-wrap">
+      <div class="progress-bar">
+        <div class="progress-bar-fill" style="width: {{ pct_clamped }}%"></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if card.ladder %}
+    <div class="card-ladder-preview">
+      {% for row in card.ladder[:3] %}
+      <span class="ladder-chip {% if loop.index == 2 %}ladder-chip--highlight{% endif %}">
+        {{ row.n }}L: ${{ "{:,.0f}".format(row.max_risk) }}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if acct.floor_is_locked %}
+    <div class="floor-locked-badge">Floor locked</div>
+    {% endif %}
+
+    {% if card.risk_warning %}
+    <div class="warn-box" style="padding: 6px 10px; font-size: 12px;">
+      Risk exceeds 3-loss threshold
+    </div>
+    {% endif %}
+
+    {% endif %}{# not breached #}
+
+    <div class="card-footer">
+      <span class="card-trades num">{{ card.trade_count }} trade{{ 's' if card.trade_count != 1 else '' }}</span>
+      {% if card.win_rate is not none %}
+      <span class="card-winrate num">{{ "%.0f"|format(card.win_rate) }}% WR</span>
+      {% endif %}
+    </div>
+
+  </a>
+  {% endfor %}
+</div>
+
+{% endif %}
+{% endblock %}

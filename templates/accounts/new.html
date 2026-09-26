@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}New Account — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <a href="{{ url_for('accounts.dashboard') }}" class="back-link">Portfolio</a>
+    <h1 class="page-title">Add account</h1>
+  </div>
+</div>
+
+<div class="form-card">
+  <form method="POST" id="new-account-form">
+
+    <div class="form-section">
+      <h2 class="form-section-title">Firm</h2>
+      <div class="field">
+        <label class="label" for="firm_id">Firm</label>
+        <select class="input" id="firm_id" name="firm_id" required>
+          <option value="">Select a firm…</option>
+          {% for firm in firms %}
+          <option value="{{ firm.id }}">{{ firm.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="nickname">Account nickname</label>
+        <input class="input" type="text" id="nickname" name="nickname"
+               placeholder="e.g. Tradeify 150k Growth">
+      </div>
+      <div class="field">
+        <label class="label" for="external_id">External account ID <span class="label-optional">(optional)</span></label>
+        <input class="input" type="text" id="external_id" name="external_id"
+               placeholder="From the firm's platform">
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2 class="form-section-title">Balance</h2>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="starting_balance">Starting balance ($)</label>
+          <input class="input num" type="number" id="starting_balance" name="starting_balance"
+                 step="0.01" placeholder="150000" required>
+        </div>
+        <div class="field">
+          <label class="label" for="current_balance">Current balance ($) <span class="label-optional">(leave blank if just started)</span></label>
+          <input class="input num" type="number" id="current_balance" name="current_balance"
+                 step="0.01" placeholder="Same as starting">
+        </div>
+        <div class="field">
+          <label class="label" for="cost_paid">Cost paid ($) <span class="label-optional">(eval fee)</span></label>
+          <input class="input num" type="number" id="cost_paid" name="cost_paid"
+                 step="0.01" placeholder="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2 class="form-section-title">Drawdown rules</h2>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="drawdown_type">Drawdown type</label>
+          <select class="input" id="drawdown_type" name="drawdown_type">
+            <option value="EOD_TRAILING">EOD Trailing</option>
+            <option value="INTRADAY_TRAILING">Intraday Trailing</option>
+            <option value="STATIC">Static</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="drawdown_amount">Drawdown amount ($)</label>
+          <input class="input num" type="number" id="drawdown_amount" name="drawdown_amount"
+                 step="0.01" placeholder="3000" required>
+        </div>
+        <div class="field">
+          <label class="label" for="lock_threshold">Floor locks at ($) <span class="label-optional">(usually starting balance)</span></label>
+          <input class="input num" type="number" id="lock_threshold" name="lock_threshold"
+                 step="0.01" placeholder="Auto: same as starting balance">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2 class="form-section-title">Evaluation targets</h2>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="profit_target">Profit target ($)</label>
+          <input class="input num" type="number" id="profit_target" name="profit_target"
+                 step="0.01" placeholder="e.g. 9000 for 150k">
+        </div>
+        <div class="field">
+          <label class="label" for="daily_loss_limit">Daily loss limit ($) <span class="label-optional">(optional)</span></label>
+          <input class="input num" type="number" id="daily_loss_limit" name="daily_loss_limit"
+                 step="0.01" placeholder="None">
+        </div>
+        <div class="field">
+          <label class="label" for="consistency_pct">Consistency rule <span class="label-optional">(0.40 = 40%)</span></label>
+          <input class="input num" type="number" id="consistency_pct" name="consistency_pct"
+                 step="0.01" min="0" max="1" placeholder="None">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="contract_cap">Max contracts (micros)</label>
+          <input class="input num" type="number" id="contract_cap" name="contract_cap"
+                 placeholder="e.g. 120 for 150k">
+        </div>
+        <div class="field field--checkbox">
+          <label class="label-check">
+            <input type="checkbox" id="dll_is_hard" name="dll_is_hard">
+            Daily loss limit is hard (kills account, not just the day)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2 class="form-section-title">Trading settings</h2>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="current_risk">Current risk setting ($)</label>
+          <input class="input num" type="number" id="current_risk" name="current_risk"
+                 step="0.01" placeholder="e.g. 1000">
+        </div>
+        <div class="field">
+          <label class="label" for="distribution_id">Trade distribution <span class="label-optional">(for simulation)</span></label>
+          <select class="input" id="distribution_id" name="distribution_id">
+            <option value="">None</option>
+            {% for dist in distributions %}
+            <option value="{{ dist.id }}">{{ dist.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Create account</button>
+      <a href="{{ url_for('accounts.dashboard') }}" class="btn btn--ghost">Cancel</a>
+    </div>
+
+  </form>
+</div>
+
+<div class="quick-fill-section">
+  <h3 class="form-section-title">Quick fill — common accounts</h3>
+  <div class="quick-fill-grid">
+    <button class="quick-fill-btn" onclick="quickFill('tradeify', 150000, 5000, 9000, 120)">
+      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" alt="Tradeify" class="firm-logo-sm">
+      Tradeify 150k Growth
+    </button>
+    <button class="quick-fill-btn" onclick="quickFill('tradeify', 50000, 3000, 3000, 50)">
+      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" alt="Tradeify" class="firm-logo-sm">
+      Tradeify 50k Growth
+    </button>
+    <button class="quick-fill-btn" onclick="quickFill('lucid', 150000, 4500, 9000, 120)">
+      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.png') }}" alt="Lucid Trading" class="firm-logo-sm" onerror="this.style.display='none'">
+      Lucid 150k
+    </button>
+    <button class="quick-fill-btn" onclick="quickFill('lucid', 50000, 3000, 3000, 50)">
+      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.png') }}" alt="Lucid Trading" class="firm-logo-sm" onerror="this.style.display='none'">
+      Lucid 50k
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const firms = {{ firms | map(attribute='slug') | list | tojson }};
+
+function quickFill(firmSlug, starting, drawdown, target, contracts) {
+  // find firm id
+  const firmSelect = document.getElementById('firm_id');
+  for (let opt of firmSelect.options) {
+    const text = opt.text.toLowerCase();
+    if ((firmSlug === 'tradeify' && text.includes('tradeify')) ||
+        (firmSlug === 'lucid' && text.includes('lucid'))) {
+      firmSelect.value = opt.value;
+      break;
+    }
+  }
+  document.getElementById('starting_balance').value = starting;
+  document.getElementById('drawdown_amount').value = drawdown;
+  document.getElementById('lock_threshold').value = starting;
+  document.getElementById('profit_target').value = target;
+  document.getElementById('contract_cap').value = contracts;
+  document.getElementById('drawdown_type').value = 'EOD_TRAILING';
+
+  // Auto-name
+  const firmName = firmSelect.options[firmSelect.selectedIndex].text;
+  document.getElementById('nickname').placeholder = firmName + ' ' + (starting/1000) + 'k';
+}
+</script>
+{% endblock %}

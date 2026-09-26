@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Stats — Prop Desk{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Stats</h1>
+</div>
+
+{# ─── Top row ─── #}
+<div class="metrics-row">
+  <div class="metric-box">
+    <span class="metric-box-value num">{{ total_trades }}</span>
+    <span class="metric-box-label">Total trades</span>
+  </div>
+  {% if total_win_rate is not none %}
+  <div class="metric-box">
+    <span class="metric-box-value num">{{ "%.1f"|format(total_win_rate) }}%</span>
+    <span class="metric-box-label">Overall win rate</span>
+  </div>
+  {% endif %}
+  <div class="metric-box {% if total_pnl < 0 %}metric-box--danger{% endif %}">
+    <span class="metric-box-value num {% if total_pnl >= 0 %}text-profit{% else %}text-loss{% endif %}">${{ "{:+,.2f}".format(total_pnl) }}</span>
+    <span class="metric-box-label">Total P&amp;L</span>
+  </div>
+  {% if avg_win is not none %}
+  <div class="metric-box">
+    <span class="metric-box-value num text-profit">${{ "{:,.0f}".format(avg_win) }}</span>
+    <span class="metric-box-label">Avg win</span>
+  </div>
+  {% endif %}
+  {% if avg_loss is not none %}
+  <div class="metric-box">
+    <span class="metric-box-value num text-loss">${{ "{:,.0f}".format(avg_loss) }}</span>
+    <span class="metric-box-label">Avg loss</span>
+  </div>
+  {% endif %}
+</div>
+
+{# ─── Per-account ─── #}
+<div class="panel">
+  <h2 class="panel-title">Per-account win rate</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th>Firm</th>
+        <th class="num-col">Trades</th>
+        <th class="num-col">Wins</th>
+        <th class="num-col">Losses</th>
+        <th class="num-col">Win rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in per_account %}
+      <tr>
+        <td><a href="{{ url_for('accounts.account_detail', account_id=row.account.id) }}" class="link">{{ row.account.nickname }}</a></td>
+        <td>{{ row.account.firm.name }}</td>
+        <td class="num">{{ row.total }}</td>
+        <td class="num text-profit">{{ row.wins }}</td>
+        <td class="num text-loss">{{ row.losses }}</td>
+        <td class="num">
+          {% if row.win_rate is not none %}
+          {{ "%.1f"|format(row.win_rate) }}%
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ─── Weekday breakdown ─── #}
+<div class="panel">
+  <h2 class="panel-title">Win rate by weekday</h2>
+  <p class="panel-note">Sample sizes under 20 trades are unreliable. Don't build strategies around small samples.</p>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Day</th>
+        <th class="num-col">Trades</th>
+        <th class="num-col">Wins</th>
+        <th class="num-col">Win rate</th>
+        <th>Signal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for day in weekday_stats %}
+      <tr {% if not day.sample_adequate %}class="row--dim"{% endif %}>
+        <td>{{ day.day }}</td>
+        <td class="num">{{ day.total }}</td>
+        <td class="num">{{ day.wins }}</td>
+        <td class="num">
+          {% if day.win_rate is not none %}
+          {{ "%.1f"|format(day.win_rate) }}%
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if not day.sample_adequate %}
+          <span class="sample-warn">n={{ day.total }} — too small</span>
+          {% else %}
+          <span class="sample-ok">n={{ day.total }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ─── Slippage tracker ─── #}
+<div class="panel">
+  <h2 class="panel-title">Slippage tracker</h2>
+  {% if avg_entry_slippage is not none %}
+  <div class="metric-box" style="display:inline-flex; margin-bottom:1rem;">
+    <span class="metric-box-value num {% if avg_entry_slippage > 0 %}text-loss{% else %}text-profit{% endif %}">{{ "{:+.4f}".format(avg_entry_slippage) }}</span>
+    <span class="metric-box-label">Avg entry slippage (signal vs fill)</span>
+  </div>
+  <p class="panel-note">
+    This number drives every projection. A positive slippage (fill worse than signal) compounds
+    across all trades. Once you have 30+ data points this becomes the most reliable number in the app.
+  </p>
+  {% endif %}
+
+  {% if slippage_data %}
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Account</th>
+          <th>Direction</th>
+          <th class="num-col">Entry slippage</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in slippage_data[:50] %}
+        <tr>
+          <td>{{ s.date }}</td>
+          <td>{{ s.account }}</td>
+          <td>{{ s.direction or '—' }}</td>
+          <td class="num {% if s.entry_slip > 0 %}text-loss{% else %}text-profit{% endif %}">
+            {{ "{:+.4f}".format(s.entry_slip) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">No slippage data yet. Add trades with signal price and fill price to track this.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

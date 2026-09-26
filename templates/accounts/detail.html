@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+{% block title %}{{ account.nickname }} — Prop Desk{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <a href="{{ url_for('accounts.dashboard') }}" class="back-link">Portfolio</a>
+    <div class="account-title-row">
+      {% if account.firm.logo_filename %}
+      <img src="{{ url_for('static', filename='brand/firms/' + account.firm.logo_filename) }}"
+           alt="{{ account.firm.name }}" class="firm-logo-md"
+           onerror="this.style.display='none'">
+      {% endif %}
+      <h1 class="page-title">{{ account.nickname }}</h1>
+      <span class="phase-badge phase-badge--{{ account.phase.value.lower() }}">{{ account.phase.value }}</span>
+    </div>
+  </div>
+</div>
+
+{# ─── Key metrics row ─── #}
+<div class="metrics-row">
+  <div class="metric-box">
+    <span class="metric-box-value num">${{ "{:,.2f}".format(account.current_balance|float) }}</span>
+    <span class="metric-box-label">Balance</span>
+  </div>
+  <div class="metric-box {% if room < 1000 %}metric-box--danger{% elif room < 2000 %}metric-box--warn{% endif %}">
+    <span class="metric-box-value num">${{ "{:,.0f}".format(room) }}</span>
+    <span class="metric-box-label">Room</span>
+  </div>
+  <div class="metric-box">
+    <span class="metric-box-value num">${{ "{:,.2f}".format(account.max_loss_limit|float) }}</span>
+    <span class="metric-box-label">Floor{% if account.floor_is_locked %} (locked){% endif %}</span>
+  </div>
+  {% if losses_survivable is not none %}
+  <div class="metric-box {% if losses_survivable <= 2 %}metric-box--danger{% elif losses_survivable <= 3 %}metric-box--warn{% endif %}">
+    <span class="metric-box-value num">{{ losses_survivable }}</span>
+    <span class="metric-box-label">Losses left</span>
+  </div>
+  {% endif %}
+  {% if account.profit_target %}
+  <div class="metric-box">
+    {% set profit = account.current_balance|float - account.starting_balance|float %}
+    <span class="metric-box-value num">${{ "{:,.2f}".format(profit) }}</span>
+    <span class="metric-box-label">Profit / ${{ "{:,.0f}".format(account.profit_target|float) }} target</span>
+  </div>
+  {% endif %}
+  {% if win_rate is not none %}
+  <div class="metric-box">
+    <span class="metric-box-value num">{{ "%.0f"|format(win_rate) }}%</span>
+    <span class="metric-box-label">Win rate ({{ trade_count }})</span>
+  </div>
+  {% endif %}
+</div>
+
+{# ─── Risk warning ─── #}
+{% if risk_warning and account.current_risk %}
+<div class="risk-warning-banner">
+  <strong>Risk warning:</strong> Current setting (${{ "{:,.0f}".format(account.current_risk|float) }}) exceeds the 3-loss threshold (${{ "{:,.0f}".format(ladder[1].max_risk) }}).
+  At this setting you survive only {{ losses_survivable }} loss{{ 'es' if losses_survivable != 1 else '' }} before breach.
+</div>
+{% endif %}
+
+{# ─── Risk ladder + update form ─── #}
+<div class="section-grid">
+
+  <div class="panel">
+    <h2 class="panel-title">Risk ladder</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Losses survived</th>
+          <th class="num-col">Max risk ($)</th>
+          <th class="num-col" id="pass-col-header">Pass odds</th>
+          <th class="num-col" id="days-col-header">Est. days</th>
+        </tr>
+      </thead>
+      <tbody id="ladder-body">
+        {% for row in ladder %}
+        <tr {% if account.current_risk and account.current_risk|float > row.max_risk and loop.index > 1 %}class="ladder-row--exceeded"{% endif %}
+            {% if loop.index == 2 %}class="ladder-row--highlight"{% endif %}>
+          <td class="num">{{ row.n }}</td>
+          <td class="num">${{ "{:,.0f}".format(row.max_risk) }}</td>
+          <td class="num" id="pass-{{ row.n }}">—</td>
+          <td class="num" id="days-{{ row.n }}">—</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if account.distribution_id %}
+    <button class="btn btn--ghost btn--sm" id="run-simulation" style="margin-top:.75rem;">
+      Run simulation
+    </button>
+    <span class="sim-loading" id="sim-loading" style="display:none;">Simulating…</span>
+    {% else %}
+    <p class="hint">Link a trade distribution to enable simulation.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 class="panel-title">Update risk setting</h2>
+    <form method="POST" action="{{ url_for('accounts.update_risk', account_id=account.id) }}"
+          class="inline-form">
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="risk-input">Risk ($)</label>
+          <input class="input num" type="number" id="risk-input" name="risk"
+                 step="50" value="{{ account.current_risk|float if account.current_risk else '' }}"
+                 placeholder="e.g. 1000">
+        </div>
+        <button type="submit" class="btn btn--primary" style="align-self:flex-end;">Set</button>
+      </div>
+    </form>
+    {% if account.floor_is_locked %}
+    <div class="info-box info-box--accent">
+      Floor is locked at ${{ "{:,.0f}".format(account.max_loss_limit|float) }}.
+      You can size up without changing your breach risk from the trailing floor.
+    </div>
+    {% else %}
+    {% set lock_at = account.lock_threshold|float + account.drawdown_amount|float %}
+    <div class="info-box">
+      Floor locks once balance reaches ${{ "{:,.0f}".format(lock_at) }}.
+      {% set to_lock = lock_at - account.current_balance|float %}
+      {% if to_lock > 0 %}${{ "{:,.0f}".format(to_lock) }} to go.{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ─── Equity curve ─── #}
+<div class="panel" style="margin-top:1.5rem;">
+  <h2 class="panel-title">Equity curve</h2>
+  <div class="chart-wrap">
+    <canvas id="equity-chart"></canvas>
+  </div>
+</div>
+
+{# ─── Trade log ─── #}
+<div class="panel" style="margin-top:1.5rem;">
+  <div class="panel-header">
+    <h2 class="panel-title">Trade log</h2>
+    <button class="btn btn--ghost btn--sm" id="toggle-trade-form">+ Add trade</button>
+  </div>
+
+  <div id="trade-form" style="display:none; margin-bottom:1.5rem;">
+    <form method="POST" action="{{ url_for('accounts.add_trade', account_id=account.id) }}">
+      <div class="field-row">
+        <div class="field">
+          <label class="label">Date/time</label>
+          <input class="input" type="datetime-local" name="opened_at">
+        </div>
+        <div class="field">
+          <label class="label">P&amp;L ($)</label>
+          <input class="input num" type="number" name="pnl" step="0.01" placeholder="+2200 or -1000" required>
+        </div>
+        <div class="field">
+          <label class="label">R-multiple</label>
+          <input class="input num" type="number" name="r_multiple" step="0.01" placeholder="e.g. 2.2">
+        </div>
+        <div class="field">
+          <label class="label">Direction</label>
+          <select class="input" name="direction">
+            <option value="">—</option>
+            <option value="LONG">Long</option>
+            <option value="SHORT">Short</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">Contracts</label>
+          <input class="input num" type="number" name="quantity" placeholder="1">
+        </div>
+        <div class="field">
+          <label class="label">Signal price</label>
+          <input class="input num" type="number" name="signal_price" step="0.0001">
+        </div>
+        <div class="field">
+          <label class="label">Fill price</label>
+          <input class="input num" type="number" name="fill_price" step="0.0001">
+        </div>
+      </div>
+      <button type="submit" class="btn btn--primary btn--sm">Log trade</button>
+    </form>
+  </div>
+
+  {% if trades %}
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Dir</th>
+          <th class="num-col">P&amp;L</th>
+          <th class="num-col">R</th>
+          <th class="num-col">Qty</th>
+          <th class="num-col">Signal</th>
+          <th class="num-col">Fill</th>
+          <th class="num-col">Slip</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for trade in trades %}
+        <tr class="{% if trade.pnl|float > 0 %}row--win{% elif trade.pnl|float < 0 %}row--loss{% endif %}">
+          <td>{{ trade.opened_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ trade.direction or '—' }}</td>
+          <td class="num {% if trade.pnl|float > 0 %}text-profit{% else %}text-loss{% endif %}">${{ "{:+,.2f}".format(trade.pnl|float) }}</td>
+          <td class="num">{{ "%.2f"|format(trade.r_multiple|float) if trade.r_multiple else '—' }}</td>
+          <td class="num">{{ trade.quantity or '—' }}</td>
+          <td class="num">{{ trade.signal_price or '—' }}</td>
+          <td class="num">{{ trade.fill_price or '—' }}</td>
+          <td class="num">
+            {% if trade.signal_price and trade.fill_price %}
+              {% set slip = trade.fill_price|float - trade.signal_price|float %}
+              <span class="{% if slip > 0 %}text-loss{% else %}text-profit{% endif %}">
+                {{ "{:+.4f}".format(slip) }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">No trades yet. Add the first one above.</p>
+  {% endif %}
+</div>
+
+{# ─── Payouts ─── #}
+{% if account.phase.value in ['FUNDED', 'LIVE'] %}
+<div class="panel" style="margin-top:1.5rem;">
+  <div class="panel-header">
+    <h2 class="panel-title">Payouts</h2>
+    <button class="btn btn--ghost btn--sm" id="toggle-payout-form">+ Record payout</button>
+  </div>
+
+  <div id="payout-form" style="display:none; margin-bottom:1.5rem;">
+    <form method="POST" action="{{ url_for('accounts.add_payout', account_id=account.id) }}">
+      <div class="field-row">
+        <div class="field">
+          <label class="label">Gross payout ($)</label>
+          <input class="input num" type="number" name="gross" step="0.01" required>
+        </div>
+        <div class="field">
+          <label class="label">Profit split</label>
+          <input class="input num" type="number" name="profit_split" step="0.01"
+                 value="0.9" min="0" max="1">
+        </div>
+        <button type="submit" class="btn btn--primary btn--sm" style="align-self:flex-end;">Record</button>
+      </div>
+    </form>
+  </div>
+
+  {% if payouts %}
+  <table class="table">
+    <thead>
+      <tr><th>Date</th><th class="num-col">Gross</th><th class="num-col">Net (your cut)</th><th class="num-col">Balance after</th></tr>
+    </thead>
+    <tbody>
+      {% for p in payouts %}
+      <tr>
+        <td>{{ p.requested_at.strftime('%Y-%m-%d') }}</td>
+        <td class="num">${{ "{:,.2f}".format(p.gross|float) }}</td>
+        <td class="num text-profit">${{ "{:,.2f}".format(p.net|float) }}</td>
+        <td class="num">${{ "{:,.2f}".format(p.balance_after|float) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Equity curve
+const equityData = {{ equity_points | tojson }};
+const floorData = {{ floor_points | tojson }};
+
+const ctx = document.getElementById('equity-chart').getContext('2d');
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    datasets: [
+      {
+        label: 'Balance',
+        data: equityData.map(p => ({ x: p.t, y: p.v })),
+        borderColor: '#06b6d4',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0,
+        fill: false,
+      },
+      {
+        label: 'Floor',
+        data: floorData.map(p => ({ x: p.t, y: p.v })),
+        borderColor: '#64748b',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0,
+        fill: false,
+        borderDash: [4, 4],
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#131922',
+        borderColor: '#222c3a',
+        borderWidth: 1,
+        titleColor: '#e8edf5',
+        bodyColor: '#94a3b8',
+        callbacks: {
+          label: ctx => ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString('en-US', {minimumFractionDigits: 2}),
+        }
+      }
+    },
+    scales: {
+      x: {
+        type: 'time',
+        ticks: { color: '#64748b', maxTicksLimit: 8 },
+        grid: { color: 'rgba(34,44,58,0.6)' },
+      },
+      y: {
+        ticks: {
+          color: '#64748b',
+          callback: v => '$' + v.toLocaleString()
+        },
+        grid: { color: 'rgba(34,44,58,0.6)' },
+      }
+    }
+  }
+});
+
+// Trade form toggle
+document.getElementById('toggle-trade-form').addEventListener('click', function() {
+  const form = document.getElementById('trade-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+});
+
+{% if account.phase.value in ['FUNDED', 'LIVE'] %}
+document.getElementById('toggle-payout-form').addEventListener('click', function() {
+  const form = document.getElementById('payout-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+});
+{% endif %}
+
+{% if account.distribution_id %}
+// Simulation
+document.getElementById('run-simulation').addEventListener('click', async function() {
+  const btn = this;
+  const loading = document.getElementById('sim-loading');
+  btn.style.display = 'none';
+  loading.style.display = 'inline';
+
+  const riskValues = [{% for row in ladder %}{{ row.max_risk|round(0)|int }}{% if not loop.last %},{% endif %}{% endfor %}];
+  const params = new URLSearchParams({ account_id: {{ account.id }} });
+  riskValues.forEach(r => params.append('risk[]', r));
+
+  try {
+    const res = await fetch('/api/simulate?' + params);
+    const data = await res.json();
+    data.forEach(row => {
+      const passEl = document.getElementById('pass-' + row.n);
+      const daysEl = document.getElementById('days-' + row.n);
+      if (passEl) passEl.textContent = row.pass_pct != null ? row.pass_pct + '%' : '—';
+      if (daysEl) daysEl.textContent = row.median_calendar_days != null ? row.median_calendar_days + 'd' : '—';
+    });
+  } catch(e) {
+    console.error(e);
+  } finally {
+    btn.style.display = 'inline';
+    loading.style.display = 'none';
+  }
+});
+{% endif %}
+</script>
+{% endblock %}
