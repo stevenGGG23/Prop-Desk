@@ -20,9 +20,12 @@ class ProductionConfig(Config):
     DEBUG = False
     SESSION_COOKIE_SECURE = True
     _db_url = os.environ.get("DATABASE_URL", "")
-    # Render provides postgres:// but SQLAlchemy requires postgresql://
+    # Normalize URL: Render/Supabase may provide postgres:// or postgresql://
+    # Force psycopg2 driver so SQLAlchemy 2.x doesn't try to load psycopg3
     if _db_url.startswith("postgres://"):
-        _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+        _db_url = _db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif _db_url.startswith("postgresql://"):
+        _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     SQLALCHEMY_DATABASE_URI = _db_url
 
 
