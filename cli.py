@@ -163,6 +163,112 @@ def register_cli(app: Flask):
         db.session.commit()
         click.echo(f"Created distribution: MNQ 2.2R Default")
 
+    @app.cli.command("seed-preset-accounts")
+    @click.option("--username", required=True, help="User who owns the accounts.")
+    def seed_preset_accounts(username):
+        """Create the five account records represented by the new-account presets."""
+        from app import db
+        from models import Account, ActivityKind, ActivityLog, DrawdownType, Firm, Phase, User
+
+        presets = [
+            {
+                "firm": "Tradeify", "nickname": "Growth 150k",
+                "external_id": "TDFYG150794989845", "legacy_names": ["Tradeify 150k Growth"],
+                "starting_balance": 150000, "current_balance": 150000, "cost_paid": 0,
+                "drawdown_amount": 5000, "max_loss_limit": 145000, "lock_threshold": 150100,
+                "profit_target": 9000, "daily_loss_limit": None, "consistency_pct": None,
+                "contract_cap": 120, "current_risk": 1600, "best_day_so_far": 0,
+            },
+            {
+                "firm": "Tradeify", "nickname": "Growth 50k",
+                "external_id": "TDFYG50581241487", "legacy_names": [],
+                "starting_balance": 50000, "current_balance": 52905.20, "cost_paid": 0,
+                "drawdown_amount": 2000, "max_loss_limit": 50905.20, "lock_threshold": 50100,
+                "profit_target": 3000, "daily_loss_limit": None, "consistency_pct": None,
+                "contract_cap": 40, "current_risk": 200, "best_day_so_far": 0,
+            },
+            {
+                "firm": "Tradeify", "nickname": "Select 50k",
+                "external_id": "TDFYSL50224996265", "legacy_names": [],
+                "starting_balance": 50000, "current_balance": 50933.30, "cost_paid": 99,
+                "drawdown_amount": 2000, "max_loss_limit": 48933.30, "lock_threshold": 50100,
+                "profit_target": 3000, "daily_loss_limit": None, "consistency_pct": 0.40,
+                "contract_cap": 40, "current_risk": 640, "best_day_so_far": 516,
+            },
+            {
+                "firm": "Lucid Trading", "nickname": "Flex 150K",
+                "external_id": "LFE15092522790001", "legacy_names": [],
+                "starting_balance": 150000, "current_balance": 152130, "cost_paid": 250.40,
+                "drawdown_amount": 4500, "max_loss_limit": 146661, "lock_threshold": 150100,
+                "profit_target": 9000, "daily_loss_limit": 2700, "consistency_pct": 0.50,
+                "contract_cap": 100, "current_risk": 1750, "best_day_so_far": 1410,
+            },
+            {
+                "firm": "Lucid Trading", "nickname": "Flex 50K",
+                "external_id": "LFE05092522790001", "legacy_names": ["Lucid Trading 50k"],
+                "starting_balance": 50000, "current_balance": 51865, "cost_paid": 0,
+                "drawdown_amount": 2000, "max_loss_limit": 49169, "lock_threshold": 50100,
+                "profit_target": 3000, "daily_loss_limit": None, "consistency_pct": 0.50,
+                "contract_cap": 40, "current_risk": 850, "best_day_so_far": 754,
+            },
+        ]
+
+        user = User.query.filter_by(username=username).first()
+        if user is None:
+            raise click.ClickException("User not found: {}".format(username))
+
+        created = 0
+        try:
+            for preset in presets:
+                firm = Firm.query.filter_by(name=preset["firm"]).first()
+                if firm is None:
+                    raise click.ClickException("Firm not found: {}".format(preset["firm"]))
+
+                existing = Account.query.filter_by(
+                    user_id=user.id, external_id=preset["external_id"]
+                ).first()
+                if existing is None:
+                    existing = Account.query.filter(
+                        Account.user_id == user.id,
+                        Account.firm_id == firm.id,
+                        Account.nickname.in_([preset["nickname"]] + preset["legacy_names"]),
+                    ).first()
+                if existing:
+                    click.echo("  Skipped existing: {}".format(existing.nickname))
+                    continue
+
+                account_data = dict(preset)
+                del account_data["firm"]
+                del account_data["legacy_names"]
+                account_data.update(
+                    user_id=user.id,
+                    firm_id=firm.id,
+                    phase=Phase.EVAL,
+                    drawdown_type=DrawdownType.EOD_TRAILING,
+                    dll_is_hard=False,
+                    peak_balance=max(
+                        preset["current_balance"],
+                        preset["max_loss_limit"] + preset["drawdown_amount"],
+                    ),
+                )
+                account = Account(**account_data)
+                db.session.add(account)
+                db.session.flush()
+                db.session.add(ActivityLog(
+                    user_id=user.id,
+                    account_id=account.id,
+                    kind=ActivityKind.NOTE,
+                    message="Account {} created".format(account.nickname),
+                ))
+                created += 1
+
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+        click.echo("Done — {} preset account(s) created.".format(created))
+
     @app.cli.command("bootstrap")
     def bootstrap():
         """Run seed-firms, seed-users, and seed-distribution in sequence.
