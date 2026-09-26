@@ -131,6 +131,11 @@ class Account(db.Model):
     current_risk = db.Column(db.Numeric(12, 2), nullable=True)
     cost_paid = db.Column(db.Numeric(10, 2), default=0, nullable=False)
 
+    # Consistency tracking — best single-day profit seen so far.
+    # Cannot be derived from the trade log for accounts with pre-existing trades,
+    # so it must be entered manually when adding an account mid-eval.
+    best_day_so_far = db.Column(db.Numeric(12, 2), default=0, nullable=False)
+
     # Distribution for simulation
     distribution_id = db.Column(db.Integer, db.ForeignKey("distributions.id"), nullable=True)
 

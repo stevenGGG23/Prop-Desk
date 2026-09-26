@@ -117,31 +117,42 @@ def new_account():
         try:
             starting = float(f["starting_balance"])
             drawdown = float(f["drawdown_amount"])
-            lock = float(f.get("lock_threshold") or starting)
+            lock = float(f.get("lock_threshold") or starting + 100)
             profit_target = float(f["profit_target"]) if f.get("profit_target") else None
             daily_ll = float(f["daily_loss_limit"]) if f.get("daily_loss_limit") else None
-            consistency = float(f["consistency_pct"]) if f.get("consistency_pct") else None
+            # Accept consistency as whole number (40) or decimal (0.40)
+            consistency_raw = float(f["consistency_pct"]) if f.get("consistency_pct") else None
+            if consistency_raw is not None:
+                consistency = consistency_raw / 100 if consistency_raw > 1 else consistency_raw
+            else:
+                consistency = None
             cap = int(f["contract_cap"]) if f.get("contract_cap") else None
             cost = float(f.get("cost_paid") or 0)
             current_risk = float(f["current_risk"]) if f.get("current_risk") else None
             dist_id = int(f["distribution_id"]) if f.get("distribution_id") else None
             current_bal = float(f.get("current_balance") or starting)
+            # Current MLL: use explicitly if provided, otherwise compute from starting - drawdown
+            current_mll_raw = f.get("current_mll", "").strip()
+            current_mll = float(current_mll_raw) if current_mll_raw else (starting - drawdown)
+            # Peak balance: must be at least current_balance and at least mll + drawdown
+            peak_bal = max(current_bal, current_mll + drawdown)
+            best_day = float(f.get("best_day_so_far") or 0)
+            phase_str = f.get("phase", "EVAL")
         except (ValueError, KeyError) as e:
             flash("Invalid input: {}".format(e), "error")
             return render_template("accounts/new.html", firms=firms, distributions=distributions)
 
-        initial_floor = starting - drawdown
         nickname = f.get("nickname", "").strip() or "{} {}k".format(firm.name, int(starting / 1000))
         acct = Account(
             user_id=current_user.id,
             firm_id=firm_id,
             nickname=nickname,
             external_id=f.get("external_id", "").strip() or None,
-            phase=Phase.EVAL,
+            phase=Phase[phase_str],
             starting_balance=starting,
             current_balance=current_bal,
-            peak_balance=current_bal,
-            max_loss_limit=initial_floor,
+            peak_balance=peak_bal,
+            max_loss_limit=current_mll,
             drawdown_amount=drawdown,
             drawdown_type=DrawdownType[f.get("drawdown_type", "EOD_TRAILING")],
             lock_threshold=lock,
@@ -153,6 +164,7 @@ def new_account():
             cost_paid=cost,
             current_risk=current_risk,
             distribution_id=dist_id,
+            best_day_so_far=best_day,
         )
         db.session.add(acct)
         db.session.flush()

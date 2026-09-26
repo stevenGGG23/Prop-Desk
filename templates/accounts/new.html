@@ -9,29 +9,68 @@
   </div>
 </div>
 
+{# ── Pre-fill presets ── #}
+<div class="quick-fill-section">
+  <p class="text-dim" style="font-size:12px;margin-bottom:10px;">Quick-fill from your accounts:</p>
+  <div class="quick-fill-grid">
+    <button type="button" class="quick-fill-btn" onclick="fillPreset('tf-growth-150k')">
+      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
+      TF Growth 150k
+    </button>
+    <button type="button" class="quick-fill-btn" onclick="fillPreset('tf-growth-50k')">
+      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
+      TF Growth 50k
+    </button>
+    <button type="button" class="quick-fill-btn" onclick="fillPreset('tf-select-50k')">
+      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
+      TF Select 50k
+    </button>
+    <button type="button" class="quick-fill-btn" onclick="fillPreset('lucid-150k')">
+      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.svg') }}" class="firm-logo-sm" alt="">
+      Lucid Flex 150K
+    </button>
+    <button type="button" class="quick-fill-btn" onclick="fillPreset('lucid-50k')">
+      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.svg') }}" class="firm-logo-sm" alt="">
+      Lucid Flex 50K
+    </button>
+  </div>
+</div>
+
 <div class="form-card">
-  <form method="POST" id="new-account-form">
+  <form method="POST" id="new-account-form" action="{{ url_for('accounts.new_account') }}">
 
     <div class="form-section">
       <h2 class="form-section-title">Firm</h2>
-      <div class="field">
-        <label class="label" for="firm_id">Firm</label>
-        <select class="input" id="firm_id" name="firm_id" required>
-          <option value="">Select a firm…</option>
-          {% for firm in firms %}
-          <option value="{{ firm.id }}">{{ firm.name }}</option>
-          {% endfor %}
-        </select>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="firm_id">Firm</label>
+          <select class="input" id="firm_id" name="firm_id" required>
+            <option value="">Select a firm…</option>
+            {% for firm in firms %}
+            <option value="{{ firm.id }}">{{ firm.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="phase">Phase</label>
+          <select class="input" id="phase" name="phase">
+            <option value="EVAL">Eval</option>
+            <option value="FUNDED">Funded</option>
+            <option value="LIVE">Live</option>
+            <option value="PASSED">Passed</option>
+            <option value="BREACHED">Breached</option>
+          </select>
+        </div>
       </div>
-      <div class="field">
-        <label class="label" for="nickname">Account nickname</label>
-        <input class="input" type="text" id="nickname" name="nickname"
-               placeholder="e.g. Tradeify 150k Growth">
-      </div>
-      <div class="field">
-        <label class="label" for="external_id">External account ID <span class="label-optional">(optional)</span></label>
-        <input class="input" type="text" id="external_id" name="external_id"
-               placeholder="From the firm's platform">
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="nickname">Nickname</label>
+          <input class="input" type="text" id="nickname" name="nickname" placeholder="e.g. Growth 150k">
+        </div>
+        <div class="field">
+          <label class="label" for="external_id">External account ID <span class="label-optional">(optional)</span></label>
+          <input class="input" type="text" id="external_id" name="external_id" placeholder="From the firm's platform">
+        </div>
       </div>
     </div>
 
@@ -44,14 +83,13 @@
                  step="0.01" placeholder="150000" required>
         </div>
         <div class="field">
-          <label class="label" for="current_balance">Current balance ($) <span class="label-optional">(leave blank if just started)</span></label>
+          <label class="label" for="current_balance">Current balance ($)</label>
           <input class="input num" type="number" id="current_balance" name="current_balance"
                  step="0.01" placeholder="Same as starting">
         </div>
         <div class="field">
           <label class="label" for="cost_paid">Cost paid ($) <span class="label-optional">(eval fee)</span></label>
-          <input class="input num" type="number" id="cost_paid" name="cost_paid"
-                 step="0.01" placeholder="0">
+          <input class="input num" type="number" id="cost_paid" name="cost_paid" step="0.01" placeholder="0">
         </div>
       </div>
     </div>
@@ -70,12 +108,25 @@
         <div class="field">
           <label class="label" for="drawdown_amount">Drawdown amount ($)</label>
           <input class="input num" type="number" id="drawdown_amount" name="drawdown_amount"
-                 step="0.01" placeholder="3000" required>
+                 step="0.01" placeholder="5000" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="current_mll">
+            Current max loss limit ($)
+            <span class="label-hint">The actual floor right now — not computed from drawdown. For a new account leave blank.</span>
+          </label>
+          <input class="input num" type="number" id="current_mll" name="current_mll"
+                 step="0.01" placeholder="Auto: starting − drawdown">
         </div>
         <div class="field">
-          <label class="label" for="lock_threshold">Floor locks at ($) <span class="label-optional">(usually starting balance)</span></label>
+          <label class="label" for="lock_threshold">
+            Floor locks at ($)
+            <span class="label-hint">Usually starting balance + 100 (e.g. 150,100 for a 150k account)</span>
+          </label>
           <input class="input num" type="number" id="lock_threshold" name="lock_threshold"
-                 step="0.01" placeholder="Auto: same as starting balance">
+                 step="0.01" placeholder="Auto: starting + 100">
         </div>
       </div>
     </div>
@@ -86,7 +137,7 @@
         <div class="field">
           <label class="label" for="profit_target">Profit target ($)</label>
           <input class="input num" type="number" id="profit_target" name="profit_target"
-                 step="0.01" placeholder="e.g. 9000 for 150k">
+                 step="0.01" placeholder="e.g. 9000">
         </div>
         <div class="field">
           <label class="label" for="daily_loss_limit">Daily loss limit ($) <span class="label-optional">(optional)</span></label>
@@ -94,16 +145,19 @@
                  step="0.01" placeholder="None">
         </div>
         <div class="field">
-          <label class="label" for="consistency_pct">Consistency rule <span class="label-optional">(0.40 = 40%)</span></label>
+          <label class="label" for="consistency_pct">
+            Consistency rule (%)
+            <span class="label-hint">Enter 40 for 40%. Only Tradeify Select and Lucid have this.</span>
+          </label>
           <input class="input num" type="number" id="consistency_pct" name="consistency_pct"
-                 step="0.01" min="0" max="1" placeholder="None">
+                 step="1" min="0" max="100" placeholder="None">
         </div>
       </div>
       <div class="field-row">
         <div class="field">
           <label class="label" for="contract_cap">Max contracts (micros)</label>
           <input class="input num" type="number" id="contract_cap" name="contract_cap"
-                 placeholder="e.g. 120 for 150k">
+                 placeholder="e.g. 120">
         </div>
         <div class="field field--checkbox">
           <label class="label-check">
@@ -115,12 +169,20 @@
     </div>
 
     <div class="form-section">
-      <h2 class="form-section-title">Trading settings</h2>
+      <h2 class="form-section-title">Current state</h2>
       <div class="field-row">
         <div class="field">
           <label class="label" for="current_risk">Current risk setting ($)</label>
           <input class="input num" type="number" id="current_risk" name="current_risk"
                  step="0.01" placeholder="e.g. 1000">
+        </div>
+        <div class="field">
+          <label class="label" for="best_day_so_far">
+            Best day so far ($)
+            <span class="label-hint">Only needed if account has a consistency rule and trades already taken. Enter 0 if none taken.</span>
+          </label>
+          <input class="input num" type="number" id="best_day_so_far" name="best_day_so_far"
+                 step="0.01" placeholder="0">
         </div>
         <div class="field">
           <label class="label" for="distribution_id">Trade distribution <span class="label-optional">(for simulation)</span></label>
@@ -141,55 +203,94 @@
 
   </form>
 </div>
-
-<div class="quick-fill-section">
-  <h3 class="form-section-title">Quick fill — common accounts</h3>
-  <div class="quick-fill-grid">
-    <button class="quick-fill-btn" onclick="quickFill('tradeify', 150000, 5000, 9000, 120)">
-      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" alt="Tradeify" class="firm-logo-sm">
-      Tradeify 150k Growth
-    </button>
-    <button class="quick-fill-btn" onclick="quickFill('tradeify', 50000, 3000, 3000, 50)">
-      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" alt="Tradeify" class="firm-logo-sm">
-      Tradeify 50k Growth
-    </button>
-    <button class="quick-fill-btn" onclick="quickFill('lucid', 150000, 4500, 9000, 120)">
-      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.png') }}" alt="Lucid Trading" class="firm-logo-sm" onerror="this.style.display='none'">
-      Lucid 150k
-    </button>
-    <button class="quick-fill-btn" onclick="quickFill('lucid', 50000, 3000, 3000, 50)">
-      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.png') }}" alt="Lucid Trading" class="firm-logo-sm" onerror="this.style.display='none'">
-      Lucid 50k
-    </button>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const firms = {{ firms | map(attribute='slug') | list | tojson }};
-
-function quickFill(firmSlug, starting, drawdown, target, contracts) {
-  // find firm id
-  const firmSelect = document.getElementById('firm_id');
-  for (let opt of firmSelect.options) {
-    const text = opt.text.toLowerCase();
-    if ((firmSlug === 'tradeify' && text.includes('tradeify')) ||
-        (firmSlug === 'lucid' && text.includes('lucid'))) {
-      firmSelect.value = opt.value;
-      break;
-    }
+// firm_id lookup by slug fragment
+function firmIdFor(slug) {
+  const sel = document.getElementById('firm_id');
+  for (let opt of sel.options) {
+    if (opt.text.toLowerCase().includes(slug)) return opt.value;
   }
-  document.getElementById('starting_balance').value = starting;
-  document.getElementById('drawdown_amount').value = drawdown;
-  document.getElementById('lock_threshold').value = starting;
-  document.getElementById('profit_target').value = target;
-  document.getElementById('contract_cap').value = contracts;
-  document.getElementById('drawdown_type').value = 'EOD_TRAILING';
+  return '';
+}
 
-  // Auto-name
-  const firmName = firmSelect.options[firmSelect.selectedIndex].text;
-  document.getElementById('nickname').placeholder = firmName + ' ' + (starting/1000) + 'k';
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === 'SELECT') {
+    el.value = val;
+  } else {
+    el.value = (val === null || val === undefined) ? '' : val;
+  }
+}
+
+const PRESETS = {
+  'tf-growth-150k': {
+    firm: 'tradeify', phase: 'EVAL',
+    nickname: 'Growth 150k', external_id: 'TDFYG150794989845',
+    starting_balance: 150000, current_balance: 150000, cost_paid: '',
+    drawdown_amount: 5000, current_mll: 145000, lock_threshold: 150100,
+    profit_target: 9000, daily_loss_limit: '', consistency_pct: '',
+    contract_cap: 120, current_risk: 1600, best_day_so_far: 0,
+  },
+  'tf-growth-50k': {
+    firm: 'tradeify', phase: 'EVAL',
+    nickname: 'Growth 50k', external_id: 'TDFYG50581241487',
+    starting_balance: 50000, current_balance: 52905.20, cost_paid: '',
+    drawdown_amount: 2000, current_mll: 50905.20, lock_threshold: 50100,
+    profit_target: 3000, daily_loss_limit: '', consistency_pct: '',
+    contract_cap: 40, current_risk: 200, best_day_so_far: 0,
+  },
+  'tf-select-50k': {
+    firm: 'tradeify', phase: 'EVAL',
+    nickname: 'Select 50k', external_id: 'TDFYSL50224996265',
+    starting_balance: 50000, current_balance: 50933.30, cost_paid: 99,
+    drawdown_amount: 2000, current_mll: 48933.30, lock_threshold: 50100,
+    profit_target: 3000, daily_loss_limit: '', consistency_pct: 40,
+    contract_cap: 40, current_risk: 640, best_day_so_far: 516,
+  },
+  'lucid-150k': {
+    firm: 'lucid', phase: 'EVAL',
+    nickname: 'Flex 150K', external_id: 'LFE15092522790001',
+    starting_balance: 150000, current_balance: 152130, cost_paid: 250.40,
+    drawdown_amount: 4500, current_mll: 146661, lock_threshold: 150100,
+    profit_target: 9000, daily_loss_limit: 2700, consistency_pct: 50,
+    contract_cap: 100, current_risk: 1750, best_day_so_far: 1410,
+  },
+  'lucid-50k': {
+    firm: 'lucid', phase: 'EVAL',
+    nickname: 'Flex 50K', external_id: 'LFE05092522790001',
+    starting_balance: 50000, current_balance: 51865, cost_paid: '',
+    drawdown_amount: 2000, current_mll: 49169, lock_threshold: 50100,
+    profit_target: 3000, daily_loss_limit: '', consistency_pct: 50,
+    contract_cap: 40, current_risk: 850, best_day_so_far: 754,
+  },
+};
+
+function fillPreset(key) {
+  const p = PRESETS[key];
+  if (!p) return;
+  set('firm_id', firmIdFor(p.firm));
+  set('phase', p.phase);
+  set('nickname', p.nickname);
+  set('external_id', p.external_id);
+  set('starting_balance', p.starting_balance);
+  set('current_balance', p.current_balance);
+  set('cost_paid', p.cost_paid);
+  set('drawdown_type', 'EOD_TRAILING');
+  set('drawdown_amount', p.drawdown_amount);
+  set('current_mll', p.current_mll);
+  set('lock_threshold', p.lock_threshold);
+  set('profit_target', p.profit_target);
+  set('daily_loss_limit', p.daily_loss_limit);
+  set('consistency_pct', p.consistency_pct);
+  set('contract_cap', p.contract_cap);
+  set('current_risk', p.current_risk);
+  set('best_day_so_far', p.best_day_so_far);
+  // scroll to form
+  document.getElementById('new-account-form').scrollIntoView({behavior:'smooth'});
 }
 </script>
 {% endblock %}
