@@ -1,57 +1,79 @@
 {% extends "base.html" %}
-{% block title %}New Account — Prop Desk{% endblock %}
+{% block title %}Connect Account — Prop Desk{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div class="page-header-left">
     <a href="{{ url_for('accounts.dashboard') }}" class="back-link">Portfolio</a>
-    <h1 class="page-title">Add account</h1>
+    <h1 class="page-title">Connect account</h1>
   </div>
 </div>
 
-{# ── JSON paste quick-setup ── #}
+{# Step 1: Choose account type #}
 <div class="panel" style="margin-bottom:1rem;">
-  <div class="panel-header">
-    <h2 class="panel-title">Quick setup — paste JSON</h2>
-    <button type="button" class="btn btn--ghost btn--sm" id="toggle-json-paste">Show</button>
-  </div>
-  <div id="json-paste-area" style="display:none;margin-top:.75rem;">
-    <p class="panel-note" style="margin-bottom:.5rem;">Paste a JSON object with any account fields and they'll fill in automatically. Supported keys: firm (name or slug), nickname, external_id, starting_balance, current_balance, drawdown_amount, max_loss_limit (or current_mll), lock_threshold, profit_target, daily_loss_limit, consistency_pct, contract_cap, current_risk, best_day_so_far, cost_paid, phase.</p>
-    <textarea class="input" id="json-paste-input" rows="6" style="font-family:monospace;font-size:12px;"
-              placeholder='{"firm":"tradeify","nickname":"Growth 150k","starting_balance":150000,"drawdown_amount":5000,...}'></textarea>
-    <button type="button" class="btn btn--primary btn--sm" style="margin-top:.5rem;" id="apply-json-btn">Apply JSON</button>
-    <span id="json-paste-error" style="color:#f87171;font-size:12px;margin-left:.75rem;"></span>
-  </div>
-</div>
-
-{# ── Pre-fill presets ── #}
-<div class="quick-fill-section">
-  <p class="text-dim" style="font-size:12px;margin-bottom:10px;">Quick-fill from your accounts:</p>
-  <div class="quick-fill-grid">
-    <button type="button" class="quick-fill-btn" onclick="fillPreset('tf-growth-150k')">
+  <h2 class="panel-title" style="margin-bottom:1rem;">Step 1 — Choose your account</h2>
+  <p class="text-dim" style="font-size:13px;margin-bottom:.875rem;">
+    Select a preset to auto-fill your account details, or paste JSON from your broker / webhook.
+  </p>
+  <div class="quick-fill-grid" style="margin-bottom:1rem;">
+    <button type="button" class="quick-fill-btn" onclick="applyPreset('tf-growth-150k')">
       <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
       TF Growth 150k
     </button>
-    <button type="button" class="quick-fill-btn" onclick="fillPreset('tf-growth-50k')">
+    <button type="button" class="quick-fill-btn" onclick="applyPreset('tf-growth-50k')">
       <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
       TF Growth 50k
     </button>
-    <button type="button" class="quick-fill-btn" onclick="fillPreset('tf-select-50k')">
+    <button type="button" class="quick-fill-btn" onclick="applyPreset('tf-select-50k')">
       <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
       TF Select 50k
     </button>
-    <button type="button" class="quick-fill-btn" onclick="fillPreset('lucid-150k')">
+    <button type="button" class="quick-fill-btn" onclick="applyPreset('lucid-150k')">
       <img src="{{ url_for('static', filename='brand/firms/lucid-trading.svg') }}" class="firm-logo-sm" alt="">
       Lucid Flex 150K
     </button>
-    <button type="button" class="quick-fill-btn" onclick="fillPreset('lucid-50k')">
+    <button type="button" class="quick-fill-btn" onclick="applyPreset('lucid-50k')">
       <img src="{{ url_for('static', filename='brand/firms/lucid-trading.svg') }}" class="firm-logo-sm" alt="">
       Lucid Flex 50K
     </button>
   </div>
+
+  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.875rem;">
+    <div style="flex:1;height:1px;background:var(--border);"></div>
+    <span class="text-dim" style="font-size:12px;">or paste JSON</span>
+    <div style="flex:1;height:1px;background:var(--border);"></div>
+  </div>
+
+  <textarea class="input" id="json-paste-input" rows="5" style="font-family:monospace;font-size:12px;margin-bottom:.5rem;"
+            placeholder='{"firm":"tradeify","nickname":"Growth 150k","starting_balance":150000,"drawdown_amount":5000,...}'></textarea>
+  <div style="display:flex;align-items:center;gap:.75rem;">
+    <button type="button" class="btn btn--ghost btn--sm" id="apply-json-btn">Apply JSON</button>
+    <span id="json-paste-status" style="font-size:12px;"></span>
+  </div>
 </div>
 
-<div class="form-card">
+{# Step 2: Review (revealed after preset/JSON applied) #}
+<div id="review-section" style="display:none;">
+  <div class="panel" style="margin-bottom:1rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h2 class="panel-title">Step 2 — Review &amp; connect</h2>
+      <button type="button" class="btn btn--ghost btn--sm" id="toggle-edit-btn" onclick="toggleEdit()">Edit details</button>
+    </div>
+
+    {# Read-only summary — shown by default #}
+    <div id="review-summary" class="field-row" style="gap:1.5rem;flex-wrap:wrap;">
+      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">FIRM</span><span id="sum-firm" class="num" style="font-weight:600;">—</span></div>
+      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">NICKNAME</span><span id="sum-nickname" style="font-weight:600;">—</span></div>
+      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">PHASE</span><span id="sum-phase">—</span></div>
+      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">STARTING BALANCE</span><span id="sum-start" class="num">—</span></div>
+      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">DRAWDOWN</span><span id="sum-dd" class="num">—</span></div>
+      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">PROFIT TARGET</span><span id="sum-target" class="num">—</span></div>
+    </div>
+  </div>
+
+  {# Edit form — hidden by default #}
+  <div id="edit-form-wrap" style="display:none;">
+  <div class="form-card">
   <form method="POST" id="new-account-form" action="{{ url_for('accounts.new_account') }}">
 
     <div class="form-section">
@@ -76,15 +98,13 @@
             <option value="BREACHED">Breached</option>
           </select>
         </div>
-      </div>
-      <div class="field-row">
         <div class="field">
           <label class="label" for="nickname">Nickname</label>
           <input class="input" type="text" id="nickname" name="nickname" placeholder="e.g. Growth 150k">
         </div>
         <div class="field">
-          <label class="label" for="external_id">External account ID <span class="label-optional">(optional)</span></label>
-          <input class="input" type="text" id="external_id" name="external_id" placeholder="From the firm's platform">
+          <label class="label" for="external_id">External ID <span class="label-optional">(optional)</span></label>
+          <input class="input" type="text" id="external_id" name="external_id">
         </div>
       </div>
     </div>
@@ -94,16 +114,14 @@
       <div class="field-row">
         <div class="field">
           <label class="label" for="starting_balance">Starting balance ($)</label>
-          <input class="input num" type="number" id="starting_balance" name="starting_balance"
-                 step="0.01" placeholder="150000" required>
+          <input class="input num" type="number" id="starting_balance" name="starting_balance" step="0.01" required>
         </div>
         <div class="field">
           <label class="label" for="current_balance">Current balance ($)</label>
-          <input class="input num" type="number" id="current_balance" name="current_balance"
-                 step="0.01" placeholder="Same as starting">
+          <input class="input num" type="number" id="current_balance" name="current_balance" step="0.01">
         </div>
         <div class="field">
-          <label class="label" for="cost_paid">Cost paid ($) <span class="label-optional">(eval fee)</span></label>
+          <label class="label" for="cost_paid">Cost paid ($)</label>
           <input class="input num" type="number" id="cost_paid" name="cost_paid" step="0.01" placeholder="0">
         </div>
       </div>
@@ -122,26 +140,15 @@
         </div>
         <div class="field">
           <label class="label" for="drawdown_amount">Drawdown amount ($)</label>
-          <input class="input num" type="number" id="drawdown_amount" name="drawdown_amount"
-                 step="0.01" placeholder="5000" required>
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label class="label" for="current_mll">
-            Current max loss limit ($)
-            <span class="label-hint">The actual floor right now — not computed from drawdown. For a new account leave blank.</span>
-          </label>
-          <input class="input num" type="number" id="current_mll" name="current_mll"
-                 step="0.01" placeholder="Auto: starting − drawdown">
+          <input class="input num" type="number" id="drawdown_amount" name="drawdown_amount" step="0.01" required>
         </div>
         <div class="field">
-          <label class="label" for="lock_threshold">
-            Floor locks at ($)
-            <span class="label-hint">Usually starting balance + 100 (e.g. 150,100 for a 150k account)</span>
-          </label>
-          <input class="input num" type="number" id="lock_threshold" name="lock_threshold"
-                 step="0.01" placeholder="Auto: starting + 100">
+          <label class="label" for="current_mll">Current MLL ($)</label>
+          <input class="input num" type="number" id="current_mll" name="current_mll" step="0.01" placeholder="Auto">
+        </div>
+        <div class="field">
+          <label class="label" for="lock_threshold">Floor locks at ($)</label>
+          <input class="input num" type="number" id="lock_threshold" name="lock_threshold" step="0.01" placeholder="Auto">
         </div>
       </div>
     </div>
@@ -151,33 +158,24 @@
       <div class="field-row">
         <div class="field">
           <label class="label" for="profit_target">Profit target ($)</label>
-          <input class="input num" type="number" id="profit_target" name="profit_target"
-                 step="0.01" placeholder="e.g. 9000">
+          <input class="input num" type="number" id="profit_target" name="profit_target" step="0.01">
         </div>
         <div class="field">
-          <label class="label" for="daily_loss_limit">Daily loss limit ($) <span class="label-optional">(optional)</span></label>
-          <input class="input num" type="number" id="daily_loss_limit" name="daily_loss_limit"
-                 step="0.01" placeholder="None">
+          <label class="label" for="daily_loss_limit">Daily loss limit ($)</label>
+          <input class="input num" type="number" id="daily_loss_limit" name="daily_loss_limit" step="0.01">
         </div>
         <div class="field">
-          <label class="label" for="consistency_pct">
-            Consistency rule (%)
-            <span class="label-hint">Enter 40 for 40%. Only Tradeify Select and Lucid have this.</span>
-          </label>
-          <input class="input num" type="number" id="consistency_pct" name="consistency_pct"
-                 step="1" min="0" max="100" placeholder="None">
+          <label class="label" for="consistency_pct">Consistency rule (%)</label>
+          <input class="input num" type="number" id="consistency_pct" name="consistency_pct" step="1" min="0" max="100">
         </div>
-      </div>
-      <div class="field-row">
         <div class="field">
-          <label class="label" for="contract_cap">Max contracts (micros)</label>
-          <input class="input num" type="number" id="contract_cap" name="contract_cap"
-                 placeholder="e.g. 120">
+          <label class="label" for="contract_cap">Max contracts</label>
+          <input class="input num" type="number" id="contract_cap" name="contract_cap">
         </div>
-        <div class="field field--checkbox">
+        <div class="field field--checkbox" style="align-self:flex-end;">
           <label class="label-check">
             <input type="checkbox" id="dll_is_hard" name="dll_is_hard">
-            Daily loss limit is hard (kills account, not just the day)
+            DLL is hard
           </label>
         </div>
       </div>
@@ -187,20 +185,15 @@
       <h2 class="form-section-title">Current state</h2>
       <div class="field-row">
         <div class="field">
-          <label class="label" for="current_risk">Current risk setting ($)</label>
-          <input class="input num" type="number" id="current_risk" name="current_risk"
-                 step="0.01" placeholder="e.g. 1000">
+          <label class="label" for="current_risk">Risk setting ($)</label>
+          <input class="input num" type="number" id="current_risk" name="current_risk" step="0.01">
         </div>
         <div class="field">
-          <label class="label" for="best_day_so_far">
-            Best day so far ($)
-            <span class="label-hint">Only needed if account has a consistency rule and trades already taken. Enter 0 if none taken.</span>
-          </label>
-          <input class="input num" type="number" id="best_day_so_far" name="best_day_so_far"
-                 step="0.01" placeholder="0">
+          <label class="label" for="best_day_so_far">Best day so far ($)</label>
+          <input class="input num" type="number" id="best_day_so_far" name="best_day_so_far" step="0.01">
         </div>
         <div class="field">
-          <label class="label" for="distribution_id">Trade distribution <span class="label-optional">(for simulation)</span></label>
+          <label class="label" for="distribution_id">Trade distribution</label>
           <select class="input" id="distribution_id" name="distribution_id">
             <option value="">None</option>
             {% for dist in distributions %}
@@ -212,19 +205,30 @@
     </div>
 
     <div class="form-actions">
-      <button type="submit" class="btn btn--primary">Create account</button>
+      <button type="submit" class="btn btn--primary">Connect account</button>
       <a href="{{ url_for('accounts.dashboard') }}" class="btn btn--ghost">Cancel</a>
     </div>
 
   </form>
+  </div>
+  </div>
+
+  {# Connect button shown when review is in summary mode #}
+  <div id="connect-btn-wrap" style="margin-top:1rem;">
+    <button type="button" class="btn btn--primary" onclick="document.getElementById('new-account-form').submit()">
+      Connect account
+    </button>
+    <a href="{{ url_for('accounts.dashboard') }}" class="btn btn--ghost" style="margin-left:.5rem;">Cancel</a>
+  </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-// firm_id lookup by slug fragment
 function firmIdFor(slug) {
   const sel = document.getElementById('firm_id');
+  if (!sel) return '';
   for (let opt of sel.options) {
     if (opt.text.toLowerCase().includes(slug)) return opt.value;
   }
@@ -234,65 +238,95 @@ function firmIdFor(slug) {
 function set(id, val) {
   const el = document.getElementById(id);
   if (!el) return;
-  if (el.tagName === 'SELECT') {
-    el.value = val;
+  if (el.tagName === 'SELECT') el.value = val;
+  else el.value = (val === null || val === undefined) ? '' : val;
+}
+
+function updateSummary(data) {
+  const firmSel = document.getElementById('firm_id');
+  const firmName = firmSel ? firmSel.options[firmSel.selectedIndex]?.text : '—';
+  document.getElementById('sum-firm').textContent = firmName || '—';
+  document.getElementById('sum-nickname').textContent = document.getElementById('nickname')?.value || '—';
+  document.getElementById('sum-phase').textContent = document.getElementById('phase')?.value || '—';
+  const sb = document.getElementById('starting_balance')?.value;
+  document.getElementById('sum-start').textContent = sb ? '$' + parseFloat(sb).toLocaleString() : '—';
+  const dd = document.getElementById('drawdown_amount')?.value;
+  document.getElementById('sum-dd').textContent = dd ? '$' + parseFloat(dd).toLocaleString() : '—';
+  const pt = document.getElementById('profit_target')?.value;
+  document.getElementById('sum-target').textContent = pt ? '$' + parseFloat(pt).toLocaleString() : '—';
+  document.getElementById('review-section').style.display = 'block';
+}
+
+function toggleEdit() {
+  const wrap = document.getElementById('edit-form-wrap');
+  const btn = document.getElementById('toggle-edit-btn');
+  const connectBtn = document.getElementById('connect-btn-wrap');
+  if (wrap.style.display === 'none') {
+    wrap.style.display = 'block';
+    connectBtn.style.display = 'none';
+    btn.textContent = 'Hide';
   } else {
-    el.value = (val === null || val === undefined) ? '' : val;
+    wrap.style.display = 'none';
+    connectBtn.style.display = 'block';
+    btn.textContent = 'Edit details';
   }
 }
 
-// JSON paste quick-setup
-document.getElementById('toggle-json-paste').addEventListener('click', function() {
-  const area = document.getElementById('json-paste-area');
-  area.style.display = area.style.display === 'none' ? 'block' : 'none';
-  this.textContent = area.style.display === 'none' ? 'Show' : 'Hide';
-});
+const keyMap = {
+  nickname: 'nickname', external_id: 'external_id',
+  starting_balance: 'starting_balance', current_balance: 'current_balance',
+  cost_paid: 'cost_paid', drawdown_amount: 'drawdown_amount',
+  current_mll: 'current_mll', max_loss_limit: 'current_mll',
+  lock_threshold: 'lock_threshold', profit_target: 'profit_target',
+  daily_loss_limit: 'daily_loss_limit', consistency_pct: 'consistency_pct',
+  contract_cap: 'contract_cap', current_risk: 'current_risk',
+  best_day_so_far: 'best_day_so_far',
+};
 
-document.getElementById('apply-json-btn').addEventListener('click', function() {
-  const errEl = document.getElementById('json-paste-error');
-  errEl.textContent = '';
-  let data;
-  try {
-    data = JSON.parse(document.getElementById('json-paste-input').value.trim());
-  } catch(e) {
-    errEl.textContent = 'Invalid JSON: ' + e.message;
-    return;
-  }
-  // Map keys to form fields
-  const keyMap = {
-    nickname: 'nickname',
-    external_id: 'external_id',
-    starting_balance: 'starting_balance',
-    current_balance: 'current_balance',
-    cost_paid: 'cost_paid',
-    drawdown_amount: 'drawdown_amount',
-    current_mll: 'current_mll',
-    max_loss_limit: 'current_mll',
-    lock_threshold: 'lock_threshold',
-    profit_target: 'profit_target',
-    daily_loss_limit: 'daily_loss_limit',
-    consistency_pct: 'consistency_pct',
-    contract_cap: 'contract_cap',
-    current_risk: 'current_risk',
-    best_day_so_far: 'best_day_so_far',
-  };
+function applyData(data) {
   let filled = 0;
   Object.entries(data).forEach(([key, val]) => {
     if (key === 'firm') {
       const fid = firmIdFor(String(val).toLowerCase());
       if (fid) { set('firm_id', fid); filled++; }
     } else if (key === 'phase') {
-      set('phase', String(val).toUpperCase());
-      filled++;
+      set('phase', String(val).toUpperCase()); filled++;
     } else if (keyMap[key]) {
-      set(keyMap[key], val === null ? '' : val);
-      filled++;
+      set(keyMap[key], val === null ? '' : val); filled++;
     }
   });
-  errEl.style.color = '#4ade80';
-  errEl.textContent = filled + ' field(s) filled. Review and submit.';
-  document.getElementById('new-account-form').scrollIntoView({behavior:'smooth'});
+  updateSummary(data);
+  return filled;
+}
+
+document.getElementById('apply-json-btn').addEventListener('click', function() {
+  const statusEl = document.getElementById('json-paste-status');
+  let data;
+  try {
+    data = JSON.parse(document.getElementById('json-paste-input').value.trim());
+  } catch(e) {
+    statusEl.style.color = '#f87171';
+    statusEl.textContent = 'Invalid JSON: ' + e.message;
+    return;
+  }
+  const filled = applyData(data);
+  statusEl.style.color = '#4ade80';
+  statusEl.textContent = filled + ' field(s) applied.';
 });
+
+function applyPreset(key) {
+  const p = PRESETS[key];
+  if (!p) return;
+  Object.entries(p).forEach(([k, v]) => {
+    if (k === 'firm') { set('firm_id', firmIdFor(v)); }
+    else if (k === 'phase') { set('phase', v); }
+    else if (keyMap[k]) { set(keyMap[k], v === null || v === undefined ? '' : v); }
+  });
+  set('drawdown_type', 'EOD_TRAILING');
+  set('nickname', p.nickname);
+  set('external_id', p.external_id || '');
+  updateSummary(p);
+}
 
 const PRESETS = {
   'tf-growth-150k': {
@@ -336,29 +370,5 @@ const PRESETS = {
     contract_cap: 40, current_risk: 850, best_day_so_far: 754,
   },
 };
-
-function fillPreset(key) {
-  const p = PRESETS[key];
-  if (!p) return;
-  set('firm_id', firmIdFor(p.firm));
-  set('phase', p.phase);
-  set('nickname', p.nickname);
-  set('external_id', p.external_id);
-  set('starting_balance', p.starting_balance);
-  set('current_balance', p.current_balance);
-  set('cost_paid', p.cost_paid);
-  set('drawdown_type', 'EOD_TRAILING');
-  set('drawdown_amount', p.drawdown_amount);
-  set('current_mll', p.current_mll);
-  set('lock_threshold', p.lock_threshold);
-  set('profit_target', p.profit_target);
-  set('daily_loss_limit', p.daily_loss_limit);
-  set('consistency_pct', p.consistency_pct);
-  set('contract_cap', p.contract_cap);
-  set('current_risk', p.current_risk);
-  set('best_day_so_far', p.best_day_so_far);
-  // scroll to form
-  document.getElementById('new-account-form').scrollIntoView({behavior:'smooth'});
-}
 </script>
 {% endblock %}

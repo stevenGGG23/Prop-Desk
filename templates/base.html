@@ -48,9 +48,9 @@
          class="nav-link {% if request.endpoint == 'log.activity_log' %}is-active{% endif %}">
         Log
       </a>
-      <a href="{{ url_for('api.imports_page') }}"
-         class="nav-link {% if request.endpoint == 'api.imports_page' %}is-active{% endif %}">
-        Import
+      <a href="{{ url_for('trades.trades_list') }}"
+         class="nav-link {% if request.endpoint == 'trades.trades_list' %}is-active{% endif %}">
+        Trades
       </a>
       <a href="{{ url_for('calendar.month_view') }}"
          class="nav-link {% if request.endpoint == 'calendar.month_view' %}is-active{% endif %}">

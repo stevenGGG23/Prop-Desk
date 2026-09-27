@@ -570,11 +570,13 @@ document.getElementById('run-simulation').addEventListener('click', async functi
   try {
     const res = await fetch('/api/simulate?' + params);
     const data = await res.json();
-    data.forEach(row => {
-      const passEl = document.getElementById('pass-' + row.n);
-      const daysEl = document.getElementById('days-' + row.n);
+    const ladderNs = [{% for row in ladder %}{{ row.n }}{% if not loop.last %},{% endif %}{% endfor %}];
+    data.forEach((row, idx) => {
+      const n = ladderNs[idx];
+      const passEl = document.getElementById('pass-' + n);
+      const daysEl = document.getElementById('days-' + n);
       if (passEl) passEl.textContent = row.pass_pct != null ? row.pass_pct + '%' : '—';
-      if (daysEl) daysEl.textContent = row.median_calendar_days != null ? row.median_calendar_days + 'd' : '—';
+      if (daysEl) daysEl.textContent = row.median_calendar_days != null ? '~' + row.median_calendar_days + 'd' : '—';
     });
   } catch(e) {
     console.error(e);

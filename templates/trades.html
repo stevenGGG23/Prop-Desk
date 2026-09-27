@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Trades — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <h1 class="page-title">List of trades</h1>
+    <span class="page-sub">{{ trades|length }} trade{{ 's' if trades|length != 1 else '' }}</span>
+  </div>
+  <div class="page-header-right">
+    <form method="GET" style="display:flex;gap:.5rem;align-items:center;">
+      <select name="account_id" class="input" style="min-width:160px;" onchange="this.form.submit()">
+        <option value="">All accounts</option>
+        {% for acct in accounts %}
+        <option value="{{ acct.id }}" {% if selected and selected.id == acct.id %}selected{% endif %}>
+          {{ acct.nickname }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+</div>
+
+{% if not trades %}
+<div class="empty-state">
+  <p style="margin-bottom:6px;">No trades yet.</p>
+  <p class="text-dim" style="font-size:12px;">Trades logged on account detail pages appear here.</p>
+</div>
+{% else %}
+<div class="panel" style="padding:0;overflow:hidden;">
+  <div class="table-scroll">
+    <table class="table tv-trade-table">
+      <thead>
+        <tr>
+          <th style="width:80px;">Trade #</th>
+          <th style="width:60px;"></th>
+          <th>Date and time</th>
+          <th class="num-col">Price</th>
+          <th class="num-col">Qty</th>
+          <th class="num-col">Net PnL</th>
+          <th class="num-col">R</th>
+        </tr>
+      </thead>
+      {% set total = trades|length %}
+      {% for trade in trades %}
+      {% set trade_num = total - loop.index0 %}
+      {% set is_win = trade.pnl and trade.pnl|float > 0 %}
+      {% set is_loss = trade.pnl and trade.pnl|float < 0 %}
+      {% set dir_lower = (trade.direction or '')|lower %}
+      <tbody class="tv-trade-group">
+        {# Exit row — shown first (top), same as TradingView #}
+        <tr class="tv-row tv-row--exit">
+          <td class="tv-trade-num" rowspan="2">
+            <span class="tv-num">{{ trade_num }}</span>
+            {% if trade.direction %}
+            <span class="tv-dir tv-dir--{{ dir_lower }}">{{ trade.direction|capitalize }}</span>
+            {% endif %}
+          </td>
+          <td class="tv-label tv-label--exit">Exit</td>
+          <td class="tv-datetime">{{ trade.closed_at.strftime('%b %d, %Y, %H:%M') if trade.closed_at else '—' }}</td>
+          <td class="num tv-price">{{ "{:,.2f}".format(trade.exit_fill_price|float) if trade.exit_fill_price else '—' }}</td>
+          <td class="num tv-size">{{ trade.quantity or '—' }}</td>
+          <td class="num tv-pnl {% if is_win %}text-profit{% elif is_loss %}text-loss{% endif %}" rowspan="2">
+            {% if trade.pnl %}{{ "{:+,.2f}".format(trade.pnl|float) }}{% else %}—{% endif %}
+          </td>
+          <td class="num tv-r {% if is_win %}text-profit{% elif is_loss %}text-loss{% endif %}" rowspan="2">
+            {% if trade.r_multiple %}{{ "{:+.2f}".format(trade.r_multiple|float) }}R{% else %}—{% endif %}
+          </td>
+        </tr>
+        {# Entry row #}
+        <tr class="tv-row tv-row--entry">
+          <td class="tv-label tv-label--entry">Entry</td>
+          <td class="tv-datetime">{{ trade.opened_at.strftime('%b %d, %Y, %H:%M') if trade.opened_at else '—' }}</td>
+          <td class="num tv-price">{{ "{:,.2f}".format(trade.fill_price|float) if trade.fill_price else '—' }}</td>
+          <td class="num tv-size">—</td>
+        </tr>
+      </tbody>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
