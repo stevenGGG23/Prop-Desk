@@ -1,5 +1,6 @@
 import enum
 import json
+import secrets
 from datetime import date, datetime, timezone
 
 from flask_login import UserMixin
@@ -150,6 +151,7 @@ class Account(db.Model):
     distribution = db.relationship("Distribution", foreign_keys=[distribution_id])
     activity_logs = db.relationship("ActivityLog", back_populates="account", lazy="dynamic")
     daily_results = db.relationship("DailyResult", back_populates="account", lazy="dynamic")
+    webhook_receivers = db.relationship("WebhookReceiver", back_populates="account", lazy="dynamic")
 
     @property
     def room(self):
@@ -348,3 +350,29 @@ class ActivityLog(db.Model):
 
     def __repr__(self):
         return f"<ActivityLog {self.kind.value} {self.created_at}>"
+
+
+class WebhookReceiver(db.Model):
+    """Incoming webhook endpoint tied to a single account.
+
+    TradersPost (or any webhook source) POSTs fill data to
+    /api/webhook/<token>.  Each receiver has a unique random token
+    so the URL itself is the credential.
+    """
+    __tablename__ = "webhook_receivers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    token = db.Column(db.String(64), unique=True, nullable=False,
+                      default=lambda: secrets.token_hex(32))
+    name = db.Column(db.String(128), nullable=True)
+    source = db.Column(db.String(64), nullable=False, default="traderspost")
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    last_received_at = db.Column(db.DateTime, nullable=True)
+    last_payload_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    account = db.relationship("Account", back_populates="webhook_receivers")
+
+    def __repr__(self):
+        return f"<WebhookReceiver {self.token[:8]}… account={self.account_id}>"

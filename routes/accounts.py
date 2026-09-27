@@ -1,14 +1,15 @@
 import json
 import math
+import secrets
 from datetime import date, datetime, timezone
 
-from flask import Blueprint, render_template, redirect, url_for, request, flash
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 
 from app import db
 from models import (Account, Bot, DailyResult, Trade, Payout, Firm, Distribution,
-                    ActivityLog, Phase, DrawdownType, ActivityKind)
+                    ActivityLog, Phase, DrawdownType, ActivityKind, WebhookReceiver)
 from engine.accounting import apply_daily_result
 from engine.risk import (room, losses_survivable, risk_ladder,
                           update_eod_floor, check_risk_warning)
@@ -84,6 +85,104 @@ def _open_trade_dates(account):
     }
 
 
+def _consistency_flags(account):
+    """Return a dict of consistency analytics for the account detail page."""
+    pct = float(account.consistency_pct) if account.consistency_pct else None
+    if pct is None:
+        return None
+
+    best = float(account.best_day_so_far)
+    total = float(account.current_balance) - float(account.starting_balance)
+    pct_label = round(pct * 100, 0)
+
+    flags = {
+        "pct": pct,
+        "pct_label": pct_label,
+        "best_day": best,
+        "total_profit": total,
+        "passing": None,
+        "current_ratio": None,
+        "min_total_needed": None,
+        "extra_needed": None,
+        "max_next_win": None,   # largest single-day win allowed without violation
+        "safe_loss_gain": None, # after a loss of this size, best_day is no longer the barrier
+    }
+
+    if total <= 0 or best <= 0:
+        # Not enough profit to evaluate; rule not yet triggered
+        flags["passing"] = True
+        return flags
+
+    ratio = best / total
+    flags["current_ratio"] = round(ratio * 100, 1)
+    flags["passing"] = ratio <= pct
+
+    # Minimum total profit such that best_day is no longer > pct of total
+    # best / min_total = pct  →  min_total = best / pct
+    min_total = best / pct
+    flags["min_total_needed"] = round(min_total, 2)
+    flags["extra_needed"] = round(max(min_total - total, 0), 2)
+
+    # Largest win tomorrow that keeps consistency:
+    # Case 1: win < best  →  best / (total + win) <= pct  →  win >= best/pct - total
+    #   The existing best_day stays dominant; any win is fine as long as total grows enough.
+    #   Max additional win without replacing best = best/pct - total (must be positive)
+    safe_win_keeping_best = best / pct - total
+    # Case 2: win > best  →  win / (total + win) <= pct  →  win <= pct * total / (1 - pct)
+    if pct < 1:
+        max_win_as_new_best = pct * total / (1 - pct)
+    else:
+        max_win_as_new_best = float("inf")
+
+    if safe_win_keeping_best > 0:
+        # There's still room to grow total without new best becoming dominant
+        flags["max_next_win"] = round(safe_win_keeping_best, 2)
+    else:
+        # best already exceeds pct × total; any new win that's smaller than best is fine
+        # largest new win that won't itself become the violating best:
+        flags["max_next_win"] = round(max_win_as_new_best, 2)
+
+    # How large a loss day makes consistency easier:
+    # After loss L, total_new = total - L, ratio_new = best / (total - L)  (worse)
+    # That's actually *harder*, not easier.
+    # What the user asked: "take an extra day loss" — meaning, if you take a loss,
+    # you gain more room on what your *next* winning day can be (relative to total)
+    # because total went down. In practice the ratio worsens, but the user means:
+    # "how much loss can I absorb and still pass if I then hit the required target?"
+    # Just show: if today is a loss day of -X, new extra_needed = (best/(pct) - (total - X))
+    # We surface max_next_win assuming current state; that's the actionable number.
+
+    return flags
+
+
+def _days_to_target(account):
+    """Estimate calendar days remaining to hit profit_target based on recent PnL."""
+    if not account.profit_target:
+        return None
+    target = float(account.profit_target)
+    profit = float(account.current_balance) - float(account.starting_balance)
+    remaining = target - profit
+    if remaining <= 0:
+        return 0  # already hit
+
+    results = (account.daily_results
+               .order_by(DailyResult.trade_date.desc())
+               .limit(20)
+               .all())
+    if not results:
+        return None
+
+    avg_daily = sum(float(r.pnl) for r in results) / len(results)
+    if avg_daily <= 0:
+        return None  # flat or losing — can't estimate
+
+    # trading days to target
+    trading_days = math.ceil(remaining / avg_daily)
+    # calendar days ≈ trading days / (5/7) / signal_frequency
+    calendar_days = math.ceil(trading_days / (5 / 7))
+    return {"trading": trading_days, "calendar": calendar_days, "remaining": round(remaining, 2)}
+
+
 def _restore_daily_snapshot(account, result):
     account.current_balance = result.balance_before
     account.peak_balance = result.peak_before
@@ -145,6 +244,23 @@ def dashboard():
             - float(acct.cost_paid or 0)
         )
 
+        # Build a simple sparkline from daily results (last 30)
+        daily_sorted = (acct.daily_results
+                        .order_by(DailyResult.trade_date.asc())
+                        .limit(30)
+                        .all())
+        sparkline = []
+        if daily_sorted:
+            running_bal = float(daily_sorted[0].balance_before)
+            sparkline.append(running_bal)
+            for dr in daily_sorted:
+                running_bal += float(dr.pnl)
+                sparkline.append(round(running_bal, 2))
+        if not sparkline:
+            sparkline = [float(acct.current_balance)]
+
+        days_est = _days_to_target(acct)
+
         cards.append({
             "account": acct,
             "room": r,
@@ -154,6 +270,8 @@ def dashboard():
             "trade_count": trade_count,
             "win_rate": win_rate,
             "net_performance": net_performance,
+            "sparkline": sparkline,
+            "days_to_target": days_est,
         })
 
     firms = Firm.query.order_by(Firm.name).all()
@@ -340,6 +458,10 @@ def account_detail(account_id):
     win_count = sum(1 for t in trades if float(t.pnl) > 0)
     win_rate = (win_count / trade_count * 100) if trade_count else None
 
+    consistency = _consistency_flags(acct)
+    days_est = _days_to_target(acct)
+    webhooks = acct.webhook_receivers.filter_by(active=True).all()
+
     return render_template(
         "accounts/detail.html",
         account=acct,
@@ -359,6 +481,9 @@ def account_detail(account_id):
         floor_points=floor_points,
         trade_count=trade_count,
         win_rate=win_rate,
+        consistency=consistency,
+        days_to_target=days_est,
+        webhooks=webhooks,
     )
 
 
@@ -651,4 +776,36 @@ def update_risk(account_id):
 
     db.session.commit()
     flash("Risk setting updated to ${:.0f}.".format(new_risk), "success")
+    return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+
+# ---------------------------------------------------------------------------
+# Webhook receiver management
+# ---------------------------------------------------------------------------
+
+@bp.route("/accounts/<int:account_id>/webhooks", methods=["POST"])
+@login_required
+def add_webhook(account_id):
+    acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
+    name = request.form.get("name", "").strip() or "TradersPost"
+    source = request.form.get("source", "traderspost").strip() or "traderspost"
+    receiver = WebhookReceiver(
+        account_id=acct.id,
+        name=name,
+        source=source,
+    )
+    db.session.add(receiver)
+    db.session.commit()
+    flash("Webhook created. Copy the URL below and paste it into TradersPost.", "success")
+    return redirect(url_for("accounts.account_detail", account_id=account_id))
+
+
+@bp.route("/accounts/<int:account_id>/webhooks/<int:webhook_id>/delete", methods=["POST"])
+@login_required
+def delete_webhook(account_id, webhook_id):
+    acct = Account.query.filter_by(id=account_id, user_id=current_user.id).first_or_404()
+    receiver = WebhookReceiver.query.filter_by(id=webhook_id, account_id=acct.id).first_or_404()
+    db.session.delete(receiver)
+    db.session.commit()
+    flash("Webhook removed.", "success")
     return redirect(url_for("accounts.account_detail", account_id=account_id))

@@ -9,6 +9,9 @@
   </div>
   <div class="page-header-right">
     {% if cards %}
+    <button class="btn btn--ghost btn--sm" id="send-report-btn" title="Email today's report">
+      Email report
+    </button>
     <div id="portfolio-risk-container" class="num" style="font-size:13px;color:var(--ink-dim);">
       <span class="spinner"></span>
     </div>
@@ -38,7 +41,7 @@
   {% set phase_val = acct.phase.value %}
   {% set is_breached = phase_val == 'BREACHED' %}
   {% set is_passed = phase_val == 'PASSED' %}
-    {% set show_performance_outline = not is_breached and not is_passed %}
+  {% set show_performance_outline = not is_breached and not is_passed %}
 
   <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}"
       class="account-card {% if is_breached %}account-card--breached{% elif is_passed %}account-card--passed{% elif card.risk_warning %}account-card--warning{% endif %} {% if show_performance_outline and card.net_performance > 0 %}account-card--winning{% elif show_performance_outline and card.net_performance < 0 %}account-card--losing{% endif %}">
@@ -63,7 +66,19 @@
 
     <div class="card-balance">
       <span class="balance-value num">${{ "{:,.2f}".format(acct.current_balance|float) }}</span>
+      <span class="balance-change num {% if card.net_performance > 0 %}text-profit{% elif card.net_performance < 0 %}text-loss{% endif %}">
+        {{ "{:+,.0f}".format(card.net_performance) }}
+      </span>
     </div>
+
+    {# ── TradingView-style sparkline ── #}
+    {% if card.sparkline|length > 1 %}
+    <div class="card-sparkline">
+      <canvas class="sparkline-canvas" data-values="{{ card.sparkline | tojson }}"
+              width="260" height="52"
+              style="width:100%;height:52px;display:block;"></canvas>
+    </div>
+    {% endif %}
 
     {% if not is_breached %}
     <div class="card-metrics">
@@ -88,7 +103,7 @@
         <span class="metric-value num {% if card.risk_warning %}metric-value--danger{% endif %}">
           ${{ "{:,.0f}".format(acct.current_risk|float) }}
         </span>
-        <span class="metric-label">Risk{% if card.risk_warning %} !{% endif %}</span>
+        <span class="metric-label">Risk{% if card.risk_warning %} ⚠{% endif %}</span>
       </div>
       {% endif %}
 
@@ -98,6 +113,13 @@
         {% set pct = (gained / acct.profit_target|float * 100)|round(0)|int %}
         <span class="metric-value num">{{ [pct, 0]|max }}%</span>
         <span class="metric-label">To target</span>
+      </div>
+      {% endif %}
+
+      {% if card.days_to_target and card.days_to_target != 0 %}
+      <div class="metric">
+        <span class="metric-value num">~{{ card.days_to_target.trading }}d</span>
+        <span class="metric-label">Est. days</span>
       </div>
       {% endif %}
     </div>
@@ -140,9 +162,6 @@
       {% if card.win_rate is not none %}
       <span class="card-winrate num">{{ "%.0f"|format(card.win_rate) }}% WR</span>
       {% endif %}
-      <span class="card-performance num {% if card.net_performance > 0 %}text-profit{% elif card.net_performance < 0 %}text-loss{% endif %}">
-        {{ "{:+,.0f}".format(card.net_performance) }} net
-      </span>
     </div>
 
   </a>
@@ -150,4 +169,90 @@
 </div>
 
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Sparkline renderer (TradingView-style mini chart) ──
+document.querySelectorAll('.sparkline-canvas').forEach(function(canvas) {
+  const values = JSON.parse(canvas.dataset.values || '[]');
+  if (values.length < 2) return;
+
+  const ctx = canvas.getContext('2d');
+  const w = canvas.offsetWidth || 260;
+  const h = canvas.offsetHeight || 52;
+  canvas.width = w * window.devicePixelRatio;
+  canvas.height = h * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const pad = 4;
+
+  const x = i => pad + (i / (values.length - 1)) * (w - 2 * pad);
+  const y = v => h - pad - ((v - min) / range) * (h - 2 * pad);
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  const isUp = values[values.length - 1] >= values[0];
+  const color = isUp ? '#06b6d4' : '#f87171';
+  grad.addColorStop(0, color + '28');
+  grad.addColorStop(1, color + '00');
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(values[0]));
+  values.forEach((v, i) => { if (i > 0) ctx.lineTo(x(i), y(v)); });
+  ctx.lineTo(x(values.length - 1), h);
+  ctx.lineTo(x(0), h);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(values[0]));
+  values.forEach((v, i) => { if (i > 0) ctx.lineTo(x(i), y(v)); });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+});
+
+{% if cards %}
+// Portfolio risk
+(async function() {
+  try {
+    const res = await fetch('/api/portfolio-risk');
+    const data = await res.json();
+    if (data.all_passed_pct != null) {
+      document.getElementById('portfolio-risk-container').innerHTML =
+        'Portfolio pass: <strong style="color:var(--accent)">' + data.all_passed_pct + '%</strong>' +
+        '&nbsp;·&nbsp;Any breach: <strong style="color:#f87171">' + data.any_breach_pct + '%</strong>';
+    } else {
+      document.getElementById('portfolio-risk-container').textContent = '';
+    }
+  } catch(e) {
+    document.getElementById('portfolio-risk-container').textContent = '';
+  }
+})();
+
+// Email report button
+document.getElementById('send-report-btn').addEventListener('click', async function() {
+  this.disabled = true;
+  this.textContent = 'Sending…';
+  try {
+    const res = await fetch('/api/send-daily-report', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      this.textContent = 'Sent ✓';
+    } else {
+      this.textContent = 'Failed';
+      alert(data.error || 'Send failed');
+    }
+  } catch(e) {
+    this.textContent = 'Error';
+  }
+});
+{% endif %}
+</script>
 {% endblock %}

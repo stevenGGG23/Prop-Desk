@@ -48,6 +48,19 @@
     <span class="metric-box-label">Profit / ${{ "{:,.0f}".format(account.profit_target|float) }} target</span>
   </div>
   {% endif %}
+  {% if days_to_target is not none %}
+    {% if days_to_target == 0 %}
+  <div class="metric-box metric-box--accent">
+    <span class="metric-box-value">✓</span>
+    <span class="metric-box-label">Target reached</span>
+  </div>
+    {% else %}
+  <div class="metric-box">
+    <span class="metric-box-value num">~{{ days_to_target.trading }}td</span>
+    <span class="metric-box-label">Days to target <span style="font-size:10px;opacity:.6;">(~{{ days_to_target.calendar }}cal)</span></span>
+  </div>
+    {% endif %}
+  {% endif %}
   {% if win_rate is not none %}
   <div class="metric-box">
     <span class="metric-box-value num">{{ "%.0f"|format(win_rate) }}%</span>
@@ -56,9 +69,66 @@
   {% endif %}
 </div>
 
+{# ─── Consistency flags ─── #}
+{% if consistency %}
+<div class="panel" style="margin-top:1rem;">
+  <h2 class="panel-title">Consistency
+    {% if consistency.passing %}
+    <span class="badge badge--green" style="margin-left:8px;">Passing</span>
+    {% else %}
+    <span class="badge badge--red" style="margin-left:8px;">Failing</span>
+    {% endif %}
+    <span class="hint" style="font-weight:400;margin-left:8px;">{{ consistency.pct_label|int }}% rule</span>
+  </h2>
+  <div class="metrics-row" style="margin-top:.5rem;">
+    <div class="metric-box {% if not consistency.passing %}metric-box--danger{% endif %}">
+      <span class="metric-box-value num">{{ consistency.current_ratio or '—' }}%</span>
+      <span class="metric-box-label">Best day / total profit</span>
+    </div>
+    <div class="metric-box">
+      <span class="metric-box-value num">${{ "{:,.0f}".format(consistency.best_day) }}</span>
+      <span class="metric-box-label">Best day so far</span>
+    </div>
+    <div class="metric-box">
+      <span class="metric-box-value num">${{ "{:,.0f}".format(consistency.total_profit) }}</span>
+      <span class="metric-box-label">Total profit</span>
+    </div>
+    {% if consistency.extra_needed and consistency.extra_needed > 0 %}
+    <div class="metric-box metric-box--warn">
+      <span class="metric-box-value num">${{ "{:,.0f}".format(consistency.extra_needed) }}</span>
+      <span class="metric-box-label">More profit needed</span>
+    </div>
+    {% endif %}
+    {% if consistency.max_next_win is not none %}
+    <div class="metric-box">
+      <span class="metric-box-value num">${{ "{:,.0f}".format(consistency.max_next_win) }}</span>
+      <span class="metric-box-label">Max next win day</span>
+    </div>
+    {% endif %}
+  </div>
+  {% if not consistency.passing %}
+  <div class="warn-box" style="margin-top:.75rem;">
+    Your best day (${{ "{:,.0f}".format(consistency.best_day) }}) is
+    {{ consistency.current_ratio }}% of total profit — over the {{ consistency.pct_label|int }}% limit.
+    You need ${{ "{:,.0f}".format(consistency.extra_needed) }} more in profit before requesting payout.
+    {% if consistency.max_next_win is not none %}
+    Any single win day over ${{ "{:,.0f}".format(consistency.max_next_win) }} will push you further over the limit.
+    {% endif %}
+  </div>
+  {% else %}
+  {% if consistency.max_next_win is not none %}
+  <p class="hint" style="margin-top:.5rem;">
+    You're consistent. Keep any single winning day under ${{ "{:,.0f}".format(consistency.max_next_win) }} to stay compliant.
+    Going over that won't fail the eval immediately — it just means you need to accumulate more total profit first.
+  </p>
+  {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
 {# ─── Daily P&L ─── #}
 {% if account.phase.value not in ['BREACHED', 'PASSED'] %}
-<div class="panel daily-result-panel">
+<div class="panel daily-result-panel" style="margin-top:1rem;">
   <div class="panel-header">
     <div>
       <h2 class="panel-title">Daily result</h2>
@@ -94,8 +164,10 @@
                placeholder="Optional">
       </div>
     </div>
-    <button type="submit" class="btn btn--primary btn--sm">{{ 'Update latest day' if editable_daily_result else 'Save daily result' }}</button>
-    <span class="hint">A new daily total cannot be combined with trade entries for that same date. Only the latest manual result can be edited.</span>
+    <div style="margin-top:1.25rem;">
+      <button type="submit" class="btn btn--primary btn--sm">{{ 'Update latest day' if editable_daily_result else 'Save daily result' }}</button>
+      <span class="hint" style="margin-left:.75rem;">A new daily total cannot be combined with trade entries for that same date. Only the latest manual result can be edited.</span>
+    </div>
   </form>
 </div>
 {% endif %}
@@ -181,6 +253,69 @@
   <div class="chart-wrap">
     <canvas id="equity-chart"></canvas>
   </div>
+</div>
+
+{# ─── Webhook config ─── #}
+<div class="panel" style="margin-top:1.5rem;">
+  <div class="panel-header">
+    <h2 class="panel-title">Live webhooks</h2>
+    <button class="btn btn--ghost btn--sm" id="toggle-webhook-form">+ Add webhook</button>
+  </div>
+  <p class="panel-note">Paste the URL below into TradersPost (or any source) as your fill-notification endpoint. Trade P&amp;L in the payload is recorded automatically.</p>
+
+  <div id="webhook-form" style="display:none;margin-bottom:1.25rem;">
+    <form method="POST" action="{{ url_for('accounts.add_webhook', account_id=account.id) }}">
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="wh-name">Label</label>
+          <input class="input" id="wh-name" name="name" placeholder="TradersPost MNQ" maxlength="128">
+        </div>
+        <div class="field">
+          <label class="label" for="wh-source">Source</label>
+          <select class="input" id="wh-source" name="source">
+            <option value="traderspost">TradersPost</option>
+            <option value="tradingview">TradingView</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn--primary btn--sm" style="align-self:flex-end;">Generate URL</button>
+      </div>
+    </form>
+  </div>
+
+  {% if webhooks %}
+  <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr><th>Label</th><th>Source</th><th>URL (paste into TradersPost)</th><th>Last received</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for wh in webhooks %}
+        <tr>
+          <td>{{ wh.name or '—' }}</td>
+          <td>{{ wh.source }}</td>
+          <td>
+            <code class="webhook-url" id="wh-url-{{ wh.id }}" style="font-size:11px;word-break:break-all;">
+              {{ request.host_url }}api/webhook/{{ wh.token }}
+            </code>
+            <button class="btn btn--ghost btn--sm" style="margin-left:.5rem;"
+                    onclick="navigator.clipboard.writeText(document.getElementById('wh-url-{{ wh.id }}').textContent.trim()); this.textContent='Copied!'">Copy</button>
+          </td>
+          <td>{{ wh.last_received_at.strftime('%Y-%m-%d %H:%M') if wh.last_received_at else 'never' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('accounts.delete_webhook', account_id=account.id, webhook_id=wh.id) }}"
+                  style="display:inline;" onsubmit="return confirm('Remove this webhook?')">
+              <button type="submit" class="btn btn--ghost btn--sm">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">No webhooks yet. Add one to receive live fills.</p>
+  {% endif %}
 </div>
 
 {# ─── Trade log ─── #}
@@ -402,9 +537,14 @@ new Chart(ctx, {
   }
 });
 
-// Trade form toggle
+// Toggle handlers
 document.getElementById('toggle-trade-form').addEventListener('click', function() {
   const form = document.getElementById('trade-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('toggle-webhook-form').addEventListener('click', function() {
+  const form = document.getElementById('webhook-form');
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
 });
 

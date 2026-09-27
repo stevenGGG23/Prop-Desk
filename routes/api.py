@@ -5,7 +5,6 @@ import hashlib
 import math
 import time
 from datetime import datetime, timezone
-from functools import lru_cache
 
 from flask import Blueprint, request, jsonify, current_app, render_template
 from flask_login import login_required, current_user
@@ -14,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from models import (Account, Bot, BotEvent, DailyResult, Distribution, Trade,
-                    Phase, ActivityLog, ActivityKind, DrawdownType)
+                    Phase, ActivityLog, ActivityKind, DrawdownType, WebhookReceiver)
 from engine.montecarlo import simulate_risk_ladder, simulate_portfolio
 from engine.risk import max_risk_for_n_losses
 
@@ -593,3 +592,161 @@ def import_distribution():
     result.update({"preview": False, "distribution": name,
                    "win_rate": round(len(wins) / (len(wins) + len(losses)) * 100, 1)})
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Webhook receiver — TradersPost / any source POSTs fill data here
+# ---------------------------------------------------------------------------
+
+@bp.route("/webhook/<token>", methods=["POST"])
+def receive_webhook(token):
+    """Public endpoint: no login required — token is the credential."""
+    receiver = WebhookReceiver.query.filter_by(token=token, active=True).first()
+    if not receiver:
+        return jsonify({"error": "not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    receiver.last_received_at = datetime.now(timezone.utc)
+    receiver.last_payload_json = json.dumps(data)
+
+    acct = Account.query.get(receiver.account_id)
+
+    # Try to extract P&L from the payload (TradersPost fill format or generic)
+    pnl = None
+    for key in ("pnl", "profit", "net_profit", "net_pnl", "realizedPnl", "realized_pnl"):
+        if key in data:
+            try:
+                pnl = float(data[key])
+                break
+            except (TypeError, ValueError):
+                pass
+
+    # Store as a BotEvent (visible in Bots → Events log)
+    source_key = hashlib.sha256(
+        "{}:{}:{}".format(token, receiver.last_received_at.isoformat(), json.dumps(data, sort_keys=True)).encode()
+    ).hexdigest()[:32]
+
+    event = BotEvent(
+        bot_id=None,  # no bot attached to raw webhook
+        account_id=acct.id,
+        event_type="WEBHOOK_FILL",
+        message="Webhook from {}: {}".format(receiver.source, json.dumps(data)),
+        event_at=datetime.now(timezone.utc),
+        source_key=source_key,
+    )
+    # BotEvent requires bot_id — use a sentinel approach: only add if bot exists
+    # Otherwise log as ActivityLog so it always persists
+    entry = ActivityLog(
+        user_id=acct.user_id,
+        account_id=acct.id,
+        kind=ActivityKind.NOTE,
+        message="Webhook received from {}: {}".format(
+            receiver.source, json.dumps(data)[:500]),
+        payload_json=json.dumps({"token_prefix": token[:8], "pnl": pnl, "raw": data}),
+    )
+    db.session.add(entry)
+
+    # If pnl is present, create a Trade record so the balance updates
+    if pnl is not None and math.isfinite(pnl) and acct.phase not in (Phase.BREACHED, Phase.PASSED):
+        trade = Trade(
+            account_id=acct.id,
+            opened_at=datetime.now(timezone.utc),
+            pnl=pnl,
+            direction=(data.get("action", "") or "").upper()[:5] or None,
+            quantity=data.get("quantity") or data.get("contracts") or None,
+            fill_price=data.get("price") or data.get("fill_price") or None,
+            signal_name="webhook:{}".format(receiver.source),
+        )
+        db.session.add(trade)
+        acct.current_balance = float(acct.current_balance) + pnl
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "db error"}), 500
+
+    return jsonify({"ok": True, "pnl_recorded": pnl})
+
+
+# ---------------------------------------------------------------------------
+# Daily email report
+# ---------------------------------------------------------------------------
+
+@bp.route("/send-daily-report", methods=["POST"])
+@login_required
+def send_daily_report():
+    """Build and send a daily summary email to REPORT_EMAIL."""
+    from flask import current_app
+    from app import mail
+
+    report_email = current_app.config.get("REPORT_EMAIL", "")
+    if not report_email:
+        return jsonify({"error": "REPORT_EMAIL not configured on server."}), 422
+
+    accounts = (Account.query
+                .filter_by(user_id=current_user.id)
+                .order_by(Account.opened_at.desc())
+                .all())
+
+    from engine.risk import room as calc_room, losses_survivable, check_risk_warning
+    from routes.accounts import _consistency_flags, _days_to_target
+
+    lines = [
+        "Prop Desk Daily Report — {}".format(datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        "=" * 60,
+        "",
+    ]
+
+    for acct in accounts:
+        if acct.phase in (Phase.BREACHED, Phase.PASSED):
+            continue
+        bal = float(acct.current_balance)
+        start = float(acct.starting_balance)
+        mll = float(acct.max_loss_limit)
+        profit = bal - start
+        r = calc_room(bal, mll)
+        risk = float(acct.current_risk) if acct.current_risk else None
+        survivable = losses_survivable(bal, mll, risk) if risk else None
+        warn = check_risk_warning(risk, bal, mll) if risk else False
+        cons = _consistency_flags(acct)
+        days = _days_to_target(acct)
+
+        lines.append("{} — {}  [{}]".format(acct.nickname, acct.firm.name, acct.phase.value))
+        lines.append("  Balance:  ${:>12,.2f}   Profit: ${:>+,.2f}".format(bal, profit))
+        lines.append("  Floor:    ${:>12,.2f}   Room:   ${:>,.0f}{}".format(
+            mll, r, "  ⚠ LOCKED" if acct.floor_is_locked else ""))
+        if risk:
+            lines.append("  Risk:     ${:>12,.0f}   Losses left: {}{}".format(
+                risk, survivable or "—", "  ⚠ WARNING" if warn else ""))
+        if acct.profit_target:
+            pct_done = min(profit / float(acct.profit_target) * 100, 100)
+            lines.append("  Target:   ${:>12,.0f}   Progress: {:.0f}%".format(
+                float(acct.profit_target), max(pct_done, 0)))
+        if days:
+            lines.append("  Est. days to target: ~{} trading / ~{} calendar".format(
+                days["trading"], days["calendar"]))
+        if cons and not cons["passing"]:
+            lines.append("  ⚠ CONSISTENCY: {:.1f}% ratio vs {:.0f}% limit — need ${:,.0f} more profit".format(
+                cons["current_ratio"] or 0, cons["pct_label"], cons["extra_needed"] or 0))
+        elif cons and cons["passing"] and cons.get("max_next_win"):
+            lines.append("  Consistency OK — max next winning day: ${:,.0f}".format(
+                cons["max_next_win"]))
+        lines.append("")
+
+    lines.append("—")
+    lines.append("Sent by Prop Desk  •  {}".format(
+        datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")))
+
+    body = "\n".join(lines)
+    subject = "Prop Desk Report — {}".format(
+        datetime.now(timezone.utc).strftime("%b %d, %Y"))
+
+    try:
+        from flask_mail import Message
+        msg = Message(subject=subject, recipients=[report_email], body=body)
+        mail.send(msg)
+    except Exception as exc:
+        return jsonify({"error": "Mail send failed: {}".format(str(exc))}), 500
+
+    return jsonify({"ok": True, "sent_to": report_email})

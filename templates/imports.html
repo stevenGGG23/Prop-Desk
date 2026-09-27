@@ -4,8 +4,8 @@
 {% block content %}
 <div class="page-header">
   <div class="page-header-left">
-    <h1 class="page-title">Import bot trades</h1>
-    <span class="page-sub">CSV fills update the selected account; trading days close when you choose.</span>
+    <h1 class="page-title">Import trades</h1>
+    <span class="page-sub">Upload a CSV to add fills to an account. Columns are auto-detected.</span>
   </div>
 </div>
 
@@ -33,45 +33,26 @@
         <input class="input" type="file" id="import-file" name="file" accept=".csv,text/csv" required>
       </div>
     </div>
-
-    <details class="csv-mapping">
-      <summary>Column mapping (optional)</summary>
-      <p class="panel-note">Leave blank to detect common headers such as P&amp;L, Net Profit, Date/Time, Trade ID, and Qty.</p>
-      <div class="field-row">
-        {% for key, label in [('pnl', 'P&L column'), ('date', 'Date/time column'), ('external_id', 'Trade ID column'), ('quantity', 'Quantity column'), ('direction', 'Direction column'), ('fill_price', 'Fill price column')] %}
-        <div class="field">
-          <label class="label" for="{{ key }}-column">{{ label }}</label>
-          <input class="input" id="{{ key }}-column" name="{{ key }}_column" placeholder="Auto-detect">
-        </div>
-        {% endfor %}
-      </div>
-    </details>
-
-    <div class="import-actions">
-      <button type="submit" class="btn btn--primary" id="csv-upload-submit">Preview CSV</button>
-      <span class="hint">A repeated upload skips previously imported fills. Invalid rows block the whole import.</span>
-    </div>
-    <label class="label-check import-finalize-option">
+    <label class="label-check import-finalize-option" style="margin-top:.75rem;">
       <input type="checkbox" name="finalize_days" value="1">
-      Finalize all included trading days now and update EOD floors
+      Finalize all trading days now and update EOD floors
     </label>
+    <div class="import-actions" style="margin-top:1rem;">
+      <button type="submit" class="btn btn--primary" id="csv-upload-submit">Preview CSV</button>
+      <span class="hint">Common headers (P&amp;L, Date/Time, Trade ID, Qty, Direction) are detected automatically. Re-uploading the same file skips duplicates.</span>
+    </div>
   </form>
   <div id="csv-upload-result" class="import-result" aria-live="polite"></div>
 </div>
 
-<div class="panel">
-  <h2 class="panel-title">Backtests are separate</h2>
-  <p class="panel-note">This import records actual fills for an account and bot. It does not replace the backtest distribution used by simulations. Leave days open while more fills may arrive; close them from the account page when finished.</p>
-</div>
-
-<div class="panel import-panel">
+<div class="panel" style="margin-top:1.5rem;">
   <h2 class="panel-title">Import a backtest distribution</h2>
-  <p class="panel-note">Each upload creates a new distribution version from trade P&amp;L divided by base risk. The account balance is not changed.</p>
+  <p class="panel-note">Upload your strategy backtest CSV to build the simulation distribution. P&amp;L is divided by base risk to get R-multiples. Account balance is not changed.</p>
   <form id="distribution-upload-form" enctype="multipart/form-data">
     <div class="field-row">
       <div class="field">
-        <label class="label" for="distribution-name">Strategy version</label>
-        <input class="input" id="distribution-name" name="name" maxlength="128" placeholder="MNQ 2.2R · version 3" required>
+        <label class="label" for="distribution-name">Strategy name / version</label>
+        <input class="input" id="distribution-name" name="name" maxlength="128" placeholder="MNQ 2.2R · v3" required>
       </div>
       <div class="field">
         <label class="label" for="distribution-account">Link to account</label>
@@ -81,7 +62,7 @@
         </select>
       </div>
       <div class="field">
-        <label class="label" for="distribution-bot">Bot version</label>
+        <label class="label" for="distribution-bot">Bot (optional)</label>
         <select class="input" id="distribution-bot" name="bot_id">
           <option value="">Not assigned</option>
           {% for bot in bots %}<option value="{{ bot.id }}">{{ bot.name }} v{{ bot.version }}</option>{% endfor %}
@@ -92,28 +73,24 @@
         <input class="input num" id="distribution-risk" type="number" name="base_risk" min="0.01" step="0.01" required>
       </div>
       <div class="field">
-        <label class="label" for="distribution-frequency">Signal days (fraction of weekdays)</label>
+        <label class="label" for="distribution-frequency">Signal days (fraction of weekdays, e.g. 0.68)</label>
         <input class="input num" id="distribution-frequency" type="number" name="signal_frequency" min="0.01" max="1" step="0.01" value="0.68" required>
       </div>
       <div class="field">
-        <label class="label" for="distribution-pnl-column">P&amp;L column</label>
-        <input class="input" id="distribution-pnl-column" name="pnl_column" placeholder="Auto-detect">
-      </div>
-      <div class="field">
-        <label class="label" for="distribution-file">Strategy CSV</label>
+        <label class="label" for="distribution-file">Backtest CSV</label>
         <input class="input" type="file" id="distribution-file" name="file" accept=".csv,text/csv" required>
       </div>
     </div>
-    <div class="import-actions">
+    <div class="import-actions" style="margin-top:1rem;">
       <button type="submit" class="btn btn--ghost" id="distribution-upload-submit">Preview backtest</button>
-      <span class="hint">Include at least one winner and one loser. Give changed risk/reward settings a new version name.</span>
+      <span class="hint">Needs at least one winner and one loser. New settings = new version name.</span>
     </div>
   </form>
   <div id="distribution-upload-result" class="import-result" aria-live="polite"></div>
 </div>
 
 {% if distributions %}
-<div class="panel">
+<div class="panel" style="margin-top:1.5rem;">
   <h2 class="panel-title">Available distributions</h2>
   <div class="table-scroll">
     <table class="table">

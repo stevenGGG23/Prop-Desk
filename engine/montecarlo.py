@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from datetime import date, timedelta
 from functools import lru_cache
 from typing import Optional
 
@@ -105,6 +106,7 @@ def simulate_account(
     rejected_total = 0
     total_trades_to_pass = []
     total_calendar_days = []
+    total_trading_days = []
 
     for _ in range(n_runs):
         bal = current_balance
@@ -122,21 +124,22 @@ def simulate_account(
         day_profits: list[float] = []
 
         day = 0
+        trading_day = 0
         trade_day_pnl = 0.0
         dll_hit_today = False
+        simulation_start = date.today()
 
         for t in range(MAX_TRADES):
-            # New day: ~68% chance of a signal
-            is_signal_day = rng.random() < signal_frequency
+            current_date = simulation_start + timedelta(days=day)
             day += 1
+            if current_date.weekday() >= 5:
+                continue
+            trading_day += 1
+
+            # Signal frequency is a fraction of weekdays, not calendar days.
+            is_signal_day = rng.random() < signal_frequency
 
             if not is_signal_day:
-                # EOD floor update even on no-trade days
-                if drawdown_type == "EOD_TRAILING" and floor < lock_threshold:
-                    if bal > peak:
-                        peak = bal
-                    candidate = peak - drawdown_amount
-                    floor = min(candidate, lock_threshold)
                 continue
 
             # Check contract cap rejection
@@ -211,6 +214,7 @@ def simulate_account(
             passed_runs += 1
             total_trades_to_pass.append(trades_taken)
             total_calendar_days.append(day)
+            total_trading_days.append(trading_day)
         elif breached:
             breached_runs += 1
 
@@ -237,6 +241,11 @@ def simulate_account(
         cd = np.array(total_calendar_days)
         result["median_calendar_days"] = int(np.median(cd))
         result["p75_calendar_days"] = int(np.percentile(cd, 75))
+
+    if total_trading_days:
+        td = np.array(total_trading_days)
+        result["median_trading_days"] = int(np.median(td))
+        result["p75_trading_days"] = int(np.percentile(td, 75))
 
     return result
 
