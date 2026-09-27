@@ -8,6 +8,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from dotenv import load_dotenv
+from sqlalchemy.exc import IntegrityError
 
 load_dotenv()
 
@@ -74,6 +75,9 @@ def create_app(env=None):
     app.register_blueprint(trades_bp)
     app.register_blueprint(api_bp)
 
+    if not app.config.get("TESTING"):
+        _bootstrap_user(app)
+
     # Public webhook endpoints are authenticated by token, not session — exempt from CSRF
     from routes.api import receive_webhook, inbound_webhook
     csrf.exempt(receive_webhook)
@@ -85,6 +89,53 @@ def create_app(env=None):
     _start_scheduler(app)
 
     return app
+
+
+def _bootstrap_user(app):
+    """Create one explicitly configured user once; never reset an existing login."""
+    if not app.config.get("BOOTSTRAP_USER_ENABLED"):
+        return
+
+    username = app.config.get("BOOTSTRAP_USER_USERNAME", "")
+    display_name = app.config.get("BOOTSTRAP_USER_DISPLAY_NAME", "")
+    email = app.config.get("BOOTSTRAP_USER_EMAIL", "")
+    password = app.config.get("BOOTSTRAP_USER_PASSWORD", "")
+    if not all((username, display_name, email, password)) or len(password) < 8:
+        logging.getLogger(__name__).error(
+            "Bootstrap user not created: required fields are missing or password is too short."
+        )
+        return
+
+    from models import User
+
+    with app.app_context():
+        existing = User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first()
+        if existing:
+            logging.getLogger(__name__).info(
+                "Bootstrap user skipped: username or email is already in use."
+            )
+            return
+
+        user = User(
+            username=username,
+            display_name=display_name,
+            email=email,
+            must_change_password=True,
+        )
+        user.set_password(password)
+        db.session.add(user)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            logging.getLogger(__name__).info(
+                "Bootstrap user skipped: username or email was created concurrently."
+            )
+            return
+
+        logging.getLogger(__name__).info("Bootstrap user created: %s", username)
 
 
 def _start_scheduler(app):

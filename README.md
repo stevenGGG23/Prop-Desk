@@ -147,6 +147,13 @@ MAIL_PASS       SMTP password
 
 4. Run `flask seed-users` once from the Render shell to create your login
 
+To provision one user without the Render Shell, add `BOOTSTRAP_USER_ENABLED=true`,
+`BOOTSTRAP_USER_USERNAME`, `BOOTSTRAP_USER_DISPLAY_NAME`, `BOOTSTRAP_USER_EMAIL`,
+and `BOOTSTRAP_USER_PASSWORD` to the service's Environment settings, then deploy.
+The app creates the user on startup only if the username and email are unused and
+requires a password change at first login. Remove the bootstrap variables after
+the deployment reports that the user was created. Do not commit real passwords.
+
 > **`--workers 1` is required.** APScheduler runs in-process; multiple workers fire the daily email multiple times.
 >
 > **SQLite will not work.** Render's filesystem resets on every deploy. Postgres is not optional.

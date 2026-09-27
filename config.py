@@ -17,6 +17,13 @@ class Config:
     REPORT_EMAIL = "stevengobran@gmail.com"
     GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
+    # Optional one-time account provisioning from deployment environment variables.
+    BOOTSTRAP_USER_ENABLED = os.environ.get("BOOTSTRAP_USER_ENABLED", "").lower() == "true"
+    BOOTSTRAP_USER_USERNAME = os.environ.get("BOOTSTRAP_USER_USERNAME", "").strip().lower()
+    BOOTSTRAP_USER_DISPLAY_NAME = os.environ.get("BOOTSTRAP_USER_DISPLAY_NAME", "").strip()
+    BOOTSTRAP_USER_EMAIL = os.environ.get("BOOTSTRAP_USER_EMAIL", "").strip().lower()
+    BOOTSTRAP_USER_PASSWORD = os.environ.get("BOOTSTRAP_USER_PASSWORD", "")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

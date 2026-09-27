@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import requests
 
-from app import create_app, db
+from app import _bootstrap_user, create_app, db
 from models import Account, ActivityLog, Bot, DailyResult, Distribution, DrawdownType, Firm, Phase, Trade, User, WebhookReceiver
 
 
@@ -91,6 +91,24 @@ class AccountRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("already in use", response.get_data(as_text=True))
+
+    def test_bootstrap_user_is_created_once_and_must_change_password(self):
+        self.app.config.update({
+            "BOOTSTRAP_USER_ENABLED": True,
+            "BOOTSTRAP_USER_USERNAME": "martin",
+            "BOOTSTRAP_USER_DISPLAY_NAME": "Martin",
+            "BOOTSTRAP_USER_EMAIL": "martingobran1@gmail.com",
+            "BOOTSTRAP_USER_PASSWORD": "temporary-password",
+        })
+
+        _bootstrap_user(self.app)
+        _bootstrap_user(self.app)
+
+        with self.app.app_context():
+            user = User.query.filter_by(username="martin").one()
+            self.assertEqual(user.email, "martingobran1@gmail.com")
+            self.assertTrue(user.must_change_password)
+            self.assertTrue(user.check_password("temporary-password"))
 
     def test_login_form_includes_csrf_token(self):
         with self.client.session_transaction() as session:
