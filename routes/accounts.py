@@ -177,10 +177,11 @@ def _days_to_target(account):
     if results:
         avg_daily = sum(float(r.pnl) for r in results) / len(results)
     else:
-        # Fallback: overall account elapsed time since opening
-        days_elapsed = (date.today() - account.opened_at.date()).days
-        if days_elapsed > 0 and profit > 0:
-            avg_daily = profit / days_elapsed
+        # Fallback: use current risk setting as expected daily gain
+        # (assumes ~1 winning trade per day at 1R).
+        # profit/days_elapsed is misleading for new/seeded accounts.
+        if account.current_risk and float(account.current_risk) > 0:
+            avg_daily = float(account.current_risk)
         else:
             return None
 
