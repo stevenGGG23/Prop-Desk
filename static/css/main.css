@@ -220,6 +220,9 @@ h3 { font-size: 1rem; font-weight: 600; }
 }
 
 .nav-user {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 13px;
   font-weight: 500;
   color: var(--ink-dim);
