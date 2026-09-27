@@ -600,7 +600,6 @@ def import_distribution():
 # ---------------------------------------------------------------------------
 
 @bp.route("/webhook/<token>", methods=["POST"])
-@csrf_exempt
 def receive_webhook(token):
     """Public endpoint: no login required — token is the credential."""
     receiver = WebhookReceiver.query.filter_by(token=token, active=True).first()
@@ -675,7 +674,6 @@ def receive_webhook(token):
 # ---------------------------------------------------------------------------
 
 @bp.route("/inbound/<token>", methods=["POST"])
-@csrf_exempt
 def inbound_webhook(token):
     """One webhook URL per user.  Route trades to the right account using
     the "account" field in the payload (matched against Account.nickname or
