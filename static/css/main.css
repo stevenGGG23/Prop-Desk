@@ -24,7 +24,7 @@
   --yellow:     #f59e0b;
 
   --nav-h:      52px;
-  --sidebar-w:  196px;
+  --sidebar-w:  230px;
   --radius:     8px;
   --radius-sm:  5px;
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
@@ -151,15 +151,15 @@ h3 { font-size: 1rem; font-weight: 600; }
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 18px 16px 16px;
+  gap: 10px;
+  padding: 22px 18px 18px;
   border-bottom: 1px solid var(--border);
   text-decoration: none;
   flex-shrink: 0;
 }
 
 .sidebar-wordmark {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--ink);
   letter-spacing: -0.02em;
@@ -169,18 +169,18 @@ h3 { font-size: 1rem; font-weight: 600; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 12px 8px;
+  gap: 3px;
+  padding: 14px 10px;
   overflow-y: auto;
 }
 
 .sidebar-link {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--ink-dim);
   text-decoration: none;
@@ -203,17 +203,17 @@ h3 { font-size: 1rem; font-weight: 600; }
 .sidebar-footer {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
-  padding: 12px 12px 14px;
+  padding: 14px 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .sidebar-user {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 7px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--ink-dim);
   padding: 2px 0;
@@ -277,11 +277,10 @@ h3 { font-size: 1rem; font-weight: 600; }
    Main Layout
    --------------------------------------------------------- */
 .main {
-  padding-top: 32px;
-  padding-bottom: 64px;
-  padding-left: 32px;
-  padding-right: 32px;
-  max-width: 1440px;
+  padding-top: 40px;
+  padding-bottom: 80px;
+  padding-left: 48px;
+  padding-right: 48px;
 }
 
 .has-sidebar .main {
@@ -428,7 +427,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 .account-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 20px;
 }
 
 /* wrap owns the visual card shell */
@@ -1309,7 +1308,7 @@ select.input {
 .advisor-list {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 56px;
 }
 
 .advisor-card {
