@@ -2,9 +2,12 @@ import io
 import re
 import unittest
 from datetime import date
+from unittest.mock import patch
+
+import requests
 
 from app import create_app, db
-from models import Account, ActivityLog, Bot, DailyResult, Distribution, DrawdownType, Firm, Phase, Trade, User
+from models import Account, ActivityLog, Bot, DailyResult, Distribution, DrawdownType, Firm, Phase, Trade, User, WebhookReceiver
 
 
 class AccountRouteTests(unittest.TestCase):
@@ -102,6 +105,233 @@ class AccountRouteTests(unittest.TestCase):
             logo = self.client.get(f"/static/brand/logoPD-{variant}.png")
             self.assertEqual(logo.status_code, 200)
             self.assertEqual(logo.mimetype, "image/png")
+
+    def test_inbound_pnl_requires_event_id_and_rejects_cumulative_totals(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.inbound_token = "test-inbound-token"
+            db.session.commit()
+
+        url = "/api/inbound/test-inbound-token"
+        missing_id = self.client.post(url, json={
+            "account": "Test 50k",
+            "pnl": 100,
+            "pnl_mode": "realized",
+        })
+        missing_mode = self.client.post(url, json={
+            "account": "Test 50k",
+            "event_id": "event-without-mode",
+            "pnl": 100,
+        })
+        cumulative = self.client.post(url, json={
+            "account": "Test 50k",
+            "event_id": "strategy-run-1",
+            "pnl": 100,
+            "pnl_mode": "cumulative",
+        })
+        invalid_balance = self.client.post(url, json={
+            "account": "Test 50k",
+            "balance": float("nan"),
+        })
+
+        self.assertEqual(missing_id.status_code, 422)
+        self.assertEqual(missing_mode.status_code, 422)
+        self.assertEqual(cumulative.status_code, 422)
+        self.assertEqual(invalid_balance.status_code, 422)
+        with self.app.app_context():
+            account = db.session.get(Account, self.account_id)
+            self.assertEqual(float(account.current_balance), 50000)
+            self.assertEqual(Trade.query.filter_by(account_id=self.account_id).count(), 0)
+
+    def test_inbound_webhook_deduplicates_pnl_and_closes_eod_day(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.inbound_token = "test-inbound-token"
+            db.session.commit()
+
+        url = "/api/inbound/test-inbound-token"
+        payload = {
+            "account": "Test 50k",
+            "event_id": "trade-2026-09-27-1",
+            "action": "sell",
+            "ticker": "MNQ",
+            "price": 20000,
+            "quantity": 1,
+            "pnl_mode": "realized",
+            "pnl": 500,
+        }
+        signal_payload = {
+            key: value for key, value in payload.items()
+            if key not in ("pnl", "pnl_mode")
+        }
+        signal = self.client.post(url, json=signal_payload)
+        duplicate_signal = self.client.post(url, json=signal_payload)
+        first = self.client.post(url, json=payload)
+        duplicate = self.client.post(url, json=payload)
+
+        self.assertEqual(signal.status_code, 200)
+        self.assertTrue(duplicate_signal.json["duplicate"])
+        self.assertEqual(first.status_code, 200)
+        self.assertFalse(first.json["duplicate"])
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertTrue(duplicate.json["duplicate"])
+        with self.app.app_context():
+            account = db.session.get(Account, self.account_id)
+            self.assertEqual(float(account.current_balance), 50500)
+            self.assertEqual(Trade.query.filter_by(account_id=self.account_id).count(), 1)
+
+        closed = self.client.post("/accounts/{}/close-day".format(self.account_id))
+        self.assertEqual(closed.status_code, 302)
+        with self.app.app_context():
+            account = db.session.get(Account, self.account_id)
+            result = DailyResult.query.filter_by(account_id=self.account_id).one()
+            self.assertEqual(float(result.pnl), 500)
+            self.assertEqual(float(account.peak_balance), 50500)
+            self.assertEqual(float(account.max_loss_limit), 48500)
+
+    def test_account_webhook_deduplicates_fill_pnl(self):
+        with self.app.app_context():
+            receiver = WebhookReceiver(
+                account_id=self.account_id,
+                token="test-account-webhook-token",
+                name="Test fills",
+                source="traderspost",
+            )
+            db.session.add(receiver)
+            db.session.commit()
+
+        payload = {
+            "event_id": "fill-123", "ticker": "MNQ",
+            "pnl_mode": "realized", "pnl": 125,
+        }
+        first = self.client.post("/api/webhook/test-account-webhook-token", json=payload)
+        duplicate = self.client.post("/api/webhook/test-account-webhook-token", json=payload)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertFalse(first.json["duplicate"])
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertTrue(duplicate.json["duplicate"])
+        with self.app.app_context():
+            account = db.session.get(Account, self.account_id)
+            self.assertEqual(float(account.current_balance), 50125)
+            self.assertEqual(Trade.query.filter_by(account_id=self.account_id).count(), 1)
+
+    def test_intraday_webhook_updates_floor_and_breach_phase(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.inbound_token = "test-inbound-token"
+            account = db.session.get(Account, self.account_id)
+            account.drawdown_type = DrawdownType.INTRADAY_TRAILING
+            db.session.commit()
+
+        url = "/api/inbound/test-inbound-token"
+        win = self.client.post(url, json={
+            "account": "Test 50k", "event_id": "intraday-win",
+            "pnl_mode": "realized", "pnl": 500,
+        })
+        loss = self.client.post(url, json={
+            "account": "Test 50k", "event_id": "intraday-loss",
+            "pnl_mode": "realized", "pnl": -2500,
+        })
+
+        self.assertEqual(win.status_code, 200)
+        self.assertEqual(loss.status_code, 200)
+        with self.app.app_context():
+            account = db.session.get(Account, self.account_id)
+            self.assertEqual(float(account.current_balance), 48000)
+            self.assertEqual(float(account.peak_balance), 50500)
+            self.assertEqual(float(account.max_loss_limit), 48500)
+            self.assertEqual(account.phase, Phase.BREACHED)
+
+    def test_inbound_webhook_reports_forwarding_failure(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.inbound_token = "test-inbound-token"
+            account = db.session.get(Account, self.account_id)
+            account.forward_url = "https://example.test/webhook"
+            db.session.commit()
+
+        payload = {
+            "account": "Test 50k",
+            "event_id": "signal-123",
+            "action": "buy",
+            "ticker": "MNQ",
+        }
+        with patch("requests.post", side_effect=requests.Timeout("downstream timeout")) as sender:
+            response = self.client.post("/api/inbound/test-inbound-token", json=payload)
+            duplicate = self.client.post("/api/inbound/test-inbound-token", json=payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json["forwarded"])
+        self.assertEqual(response.json["forward_error"], "Timeout")
+        self.assertTrue(duplicate.json["duplicate"])
+        self.assertEqual(sender.call_count, 1)
+        with self.app.app_context():
+            self.assertEqual(
+                ActivityLog.query.filter(
+                    ActivityLog.account_id == self.account_id,
+                    ActivityLog.message.like("Webhook forwarding failed%"),
+                ).count(),
+                1,
+            )
+
+    def test_inbound_webhook_reports_forwarding_http_error(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.inbound_token = "test-inbound-token"
+            account = db.session.get(Account, self.account_id)
+            account.forward_url = "https://example.test/webhook"
+            db.session.commit()
+
+        upstream = requests.Response()
+        upstream.status_code = 503
+        upstream.url = "https://example.test/webhook"
+        with patch("requests.post", return_value=upstream):
+            response = self.client.post("/api/inbound/test-inbound-token", json={
+                "account": "Test 50k", "event_id": "signal-http-1",
+                "action": "buy", "ticker": "MNQ",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json["forwarded"])
+        self.assertEqual(response.json["forward_error"], "HTTPError")
+        with self.app.app_context():
+            log_entry = ActivityLog.query.filter(
+                ActivityLog.account_id == self.account_id,
+                ActivityLog.message.like("Webhook forwarding failed%"),
+            ).one()
+            self.assertEqual(log_entry.payload["status_code"], 503)
+
+    def test_inbound_fill_is_not_forwarded_to_execution_endpoint(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.inbound_token = "test-inbound-token"
+            account = db.session.get(Account, self.account_id)
+            account.forward_url = "https://example.test/webhook"
+            db.session.commit()
+
+        with patch("requests.post") as sender:
+            response = self.client.post("/api/inbound/test-inbound-token", json={
+                "account": "Test 50k", "event_id": "fill-no-loop",
+                "pnl_mode": "realized", "pnl": 100, "ticker": "MNQ",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json["forwarded"])
+        self.assertEqual(response.json["forward_reason"], "fill_or_balance_update")
+        sender.assert_not_called()
+
+    def test_dashboard_webhook_sample_is_signal_only(self):
+        response = self.client.get("/")
+        page = response.get_data(as_text=True)
+        sample = re.search(
+            r'<div id="webhook-panel".*?<pre[^>]*>(.*?)</pre>', page, re.DOTALL
+        ).group(1)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('"event_id"', sample)
+        self.assertNotIn('"pnl"', sample)
+        self.assertNotIn("strategy.netprofit", sample)
 
     def test_daily_result_can_be_corrected_without_double_counting(self):
         url = "/accounts/{}/daily-result".format(self.account_id)

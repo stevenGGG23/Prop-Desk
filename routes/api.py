@@ -16,9 +16,139 @@ from app import db
 from models import (Account, Bot, BotEvent, DailyResult, Distribution, Trade,
                     Phase, ActivityLog, ActivityKind, DrawdownType, WebhookReceiver)
 from engine.montecarlo import simulate_risk_ladder, simulate_portfolio
-from engine.risk import max_risk_for_n_losses
+from engine.risk import max_risk_for_n_losses, update_eod_floor
 
 bp = Blueprint("api", __name__, url_prefix="/api")
+
+_WEBHOOK_PNL_FIELDS = (
+    "pnl", "profit", "net_profit", "net_pnl", "realizedPnl", "realized_pnl",
+)
+
+
+def _webhook_pnl(data):
+    for key in _WEBHOOK_PNL_FIELDS:
+        if key not in data or data[key] is None or data[key] == "":
+            continue
+        try:
+            value = float(data[key])
+        except (TypeError, ValueError):
+            return None, "'{}' must be a finite realized P&L amount".format(key)
+        if not math.isfinite(value):
+            return None, "'{}' must be a finite realized P&L amount".format(key)
+        return value, None
+    return None, None
+
+
+def _webhook_balance(data):
+    for key in ("balance", "account_balance", "current_balance"):
+        if key not in data or data[key] is None or data[key] == "":
+            continue
+        try:
+            value = float(data[key])
+        except (TypeError, ValueError):
+            return None, "'{}' must be a finite account balance".format(key)
+        if not math.isfinite(value):
+            return None, "'{}' must be a finite account balance".format(key)
+        return value, None
+    return None, None
+
+
+def _webhook_event_id(data):
+    for key in ("event_id", "execution_id", "fill_id", "trade_id"):
+        value = data.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def _webhook_pnl_error(data, pnl, event_id):
+    if pnl is None:
+        return None
+    pnl_mode = str(data.get("pnl_mode", "")).strip().lower()
+    if pnl_mode == "cumulative":
+        return "cumulative P&L is not supported; send realized P&L once per event"
+    if pnl_mode not in ("realized", "delta"):
+        return "pnl_mode must be explicitly set to 'realized' or 'delta'"
+    if not event_id:
+        return "event_id is required when sending realized P&L"
+    return None
+
+
+def _webhook_import_hash(event_id):
+    return hashlib.sha256(("prop-desk-webhook:" + event_id).encode("utf-8")).hexdigest()
+
+
+def _webhook_duplicate(account):
+    return jsonify({
+        "ok": True,
+        "duplicate": True,
+        "account": account.nickname,
+        "pnl_recorded": 0,
+        "balance": float(account.current_balance),
+    })
+
+
+def _webhook_event_seen(account_id, import_hash, has_pnl):
+    if not import_hash:
+        return False
+    if Trade.query.filter_by(account_id=account_id, import_hash=import_hash).first():
+        return True
+    if has_pnl:
+        return False
+    return ActivityLog.query.filter_by(account_id=account_id).filter(
+        ActivityLog.payload_json.contains(import_hash)
+    ).first() is not None
+
+
+def _update_webhook_risk_state(account, user_id):
+    if account.drawdown_type == DrawdownType.INTRADAY_TRAILING:
+        state = update_eod_floor(
+            current_balance=float(account.current_balance),
+            peak_balance=float(account.peak_balance),
+            max_loss_limit=float(account.max_loss_limit),
+            drawdown_amount=float(account.drawdown_amount),
+            lock_threshold=float(account.lock_threshold),
+        )
+        account.peak_balance = state[0]
+        account.max_loss_limit = state[1]
+
+    if account.drawdown_type == DrawdownType.EOD_TRAILING or account.phase != Phase.EVAL:
+        return
+
+    balance = float(account.current_balance)
+    floor = float(account.max_loss_limit)
+    target = float(account.profit_target) if account.profit_target else None
+    starting_balance = float(account.starting_balance)
+    if balance <= floor:
+        account.phase = Phase.BREACHED
+        account.closed_at = datetime.now(timezone.utc)
+        kind = ActivityKind.BREACH
+        message = "{} breached — balance {:.2f} hit floor {:.2f}".format(
+            account.nickname, balance, floor,
+        )
+    elif target and balance - starting_balance >= target:
+        account.phase = Phase.PASSED
+        account.closed_at = datetime.now(timezone.utc)
+        kind = ActivityKind.PHASE_CHANGE
+        message = "{} passed eval — profit {:.2f}".format(
+            account.nickname, balance - starting_balance,
+        )
+    else:
+        return
+
+    db.session.add(ActivityLog(
+        user_id=user_id,
+        account_id=account.id,
+        kind=kind,
+        message=message,
+        payload_json=json.dumps({"balance": balance, "floor": floor}),
+    ))
+
+
+def _apply_webhook_trade_result(account, pnl, user_id):
+    account.current_balance = float(account.current_balance) + pnl
+    _update_webhook_risk_state(account, user_id)
+
 
 # Simple in-memory cache: {cache_key: (result, expires_at)}
 _cache: dict = {}
@@ -606,30 +736,39 @@ def receive_webhook(token):
     if not receiver:
         return jsonify({"error": "not found"}), 404
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON object required"}), 400
+
+    pnl, error = _webhook_pnl(data)
+    if error:
+        return jsonify({"error": error}), 422
+    event_id = _webhook_event_id(data)
+    error = _webhook_pnl_error(data, pnl, event_id)
+    if error:
+        return jsonify({"error": error}), 422
+    import_hash = _webhook_import_hash(event_id) if event_id else None
+    has_pnl = pnl is not None and math.isfinite(pnl)
+
+    acct = Account.query.filter_by(id=receiver.account_id).with_for_update().first()
+    if _webhook_event_seen(acct.id, import_hash, has_pnl):
+        receiver.last_received_at = datetime.now(timezone.utc)
+        receiver.last_payload_json = json.dumps(data)
+        db.session.commit()
+        return jsonify({
+            "ok": True,
+            "duplicate": True,
+            "pnl_recorded": 0,
+            "signal": (data.get("action") or "").upper() or None,
+            "balance": float(acct.current_balance),
+        })
+
     receiver.last_received_at = datetime.now(timezone.utc)
     receiver.last_payload_json = json.dumps(data)
 
-    acct = Account.query.get(receiver.account_id)
-
-    # Try to extract P&L from the payload
-    # NOTE: Standard TradersPost entry signals {"ticker":"MNQ","action":"buy"}
-    # do NOT include P&L — that field only appears in close/fill notifications.
-    # Without P&L we log the signal as a NOTE so you can see activity, but
-    # the balance is not changed.
-    pnl = None
-    for key in ("pnl", "profit", "net_profit", "net_pnl", "realizedPnl", "realized_pnl"):
-        if key in data:
-            try:
-                pnl = float(data[key])
-                break
-            except (TypeError, ValueError):
-                pass
-
+    # Entry signals without realized P&L remain activity notes and do not change balance.
     ticker = data.get("ticker", "")
     action = (data.get("action", "") or "").upper()
-    has_pnl = pnl is not None and math.isfinite(pnl)
-
     if has_pnl:
         msg = "Webhook fill from {}: {} {} pnl={:+.2f}".format(
             receiver.source, action, ticker, pnl)
@@ -642,11 +781,14 @@ def receive_webhook(token):
         account_id=acct.id,
         kind=ActivityKind.NOTE,
         message=msg,
-        payload_json=json.dumps({"token_prefix": token[:8], "pnl": pnl, "raw": data}),
+        payload_json=json.dumps({
+            "token_prefix": token[:8], "pnl": pnl,
+            "event_hash": import_hash, "raw": data,
+        }),
     )
     db.session.add(entry)
 
-    # Only update balance if the payload actually contains a realized P&L
+    pnl_applied = False
     if has_pnl and acct.phase not in (Phase.BREACHED, Phase.PASSED):
         trade = Trade(
             account_id=acct.id,
@@ -656,17 +798,38 @@ def receive_webhook(token):
             quantity=data.get("quantity") or data.get("contracts") or None,
             fill_price=data.get("price") or data.get("fill_price") or None,
             signal_name="webhook:{}".format(receiver.source),
+            import_hash=import_hash,
         )
         db.session.add(trade)
-        acct.current_balance = float(acct.current_balance) + pnl
+        _apply_webhook_trade_result(acct, pnl, acct.user_id)
+        pnl_applied = True
 
     try:
         db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        if _webhook_event_seen(acct.id, import_hash, has_pnl):
+            return jsonify({
+                "ok": True,
+                "duplicate": True,
+                "pnl_recorded": 0,
+                "signal": action or None,
+                "balance": float(acct.current_balance),
+            })
+        current_app.logger.exception("Webhook database integrity error")
+        return jsonify({"error": "db error"}), 500
     except Exception:
         db.session.rollback()
+        current_app.logger.exception("Webhook database error")
         return jsonify({"error": "db error"}), 500
 
-    return jsonify({"ok": True, "pnl_recorded": pnl, "signal": action or None})
+    return jsonify({
+        "ok": True,
+        "duplicate": False,
+        "pnl_recorded": pnl if pnl_applied else None,
+        "signal": action or None,
+        "balance": float(acct.current_balance),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -679,29 +842,26 @@ def inbound_webhook(token):
     the "account" field in the payload (matched against Account.nickname or
     Account.external_id, case-insensitive).
 
-    Minimum payload:
-        {"account": "Growth 150k", "action": "buy", "ticker": "MNQ"}
+    Signal-only payload:
+        {"event_id": "signal-123", "account": "Growth 150k",
+         "action": "buy", "ticker": "MNQ"}
 
-    With P&L (updates balance + logs trade):
-        {"account": "Growth 150k", "action": "buy", "ticker": "MNQ",
-         "price": 21500.25, "quantity": 5, "pnl": 900.00}
+    With realized P&L (updates balance + logs trade once):
+        {"event_id": "fill-123", "account": "Growth 150k", "action": "sell",
+         "ticker": "MNQ", "price": 21500.25, "quantity": 5,
+         "pnl_mode": "realized", "pnl": 125.00}
 
-    TradingView strategy alert JSON to paste in TV:
-        {
-          "account": "Growth 150k",
-          "ticker": "{{ticker}}",
-          "action": "{{strategy.order.action}}",
-          "sentiment": "{{strategy.market_position}}",
-          "price": {{close}},
-          "pnl": {{strategy.netprofit}}
-        }
+    P&L is a realized per-event amount, never cumulative strategy.netprofit.
+    Use a stable event_id so sender retries cannot double-count the fill.
     """
     from models import User
     user = User.query.filter_by(inbound_token=token).first()
     if not user:
         return jsonify({"error": "invalid token"}), 404
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON object required"}), 400
 
     # ── Resolve account ──────────────────────────────────────────────────────
     account_name = (data.get("account") or data.get("account_id") or "").strip()
@@ -716,6 +876,7 @@ def inbound_webhook(token):
                     Account.external_id == account_name,
                 )
             )
+            .with_for_update()
             .first())
     if not acct:
         return jsonify({"error": "no account matched '{}'. Check the nickname in Prop Desk.".format(account_name)}), 404
@@ -751,31 +912,29 @@ def inbound_webhook(token):
             except (TypeError, ValueError):
                 pass
 
-    pnl = None
-    for key in ("pnl", "profit", "net_pnl", "net_profit", "realizedPnl", "realized_pnl"):
-        if key in data:
-            try:
-                pnl = float(data[key])
-                break
-            except (TypeError, ValueError):
-                pass
-
-    # Optional: caller can send current balance directly to sync the account
-    new_balance = None
-    for key in ("balance", "account_balance", "current_balance"):
-        if key in data:
-            try:
-                new_balance = float(data[key])
-                break
-            except (TypeError, ValueError):
-                pass
-
+    pnl, error = _webhook_pnl(data)
+    if error:
+        return jsonify({"error": error}), 422
+    new_balance, error = _webhook_balance(data)
+    if error:
+        return jsonify({"error": error}), 422
+    event_id = _webhook_event_id(data)
+    error = _webhook_pnl_error(data, pnl, event_id)
+    if error:
+        return jsonify({"error": error}), 422
+    import_hash = _webhook_import_hash(event_id) if event_id else None
     has_pnl = pnl is not None and math.isfinite(pnl)
+
+    if _webhook_event_seen(acct.id, import_hash, has_pnl):
+        return _webhook_duplicate(acct)
 
     # ── Log + update ─────────────────────────────────────────────────────────
     if has_pnl:
         msg = "Inbound webhook: {} {} {}  pnl={:+.2f}".format(
             direction or action_raw.upper(), ticker, acct.nickname, pnl)
+    elif new_balance is not None:
+        msg = "Inbound webhook: balance sync {} -> ${:.2f}".format(
+            acct.nickname, new_balance)
     else:
         msg = "Inbound webhook: {} {} {}  (signal only — no P&L)".format(
             direction or action_raw.upper(), ticker, acct.nickname)
@@ -785,10 +944,11 @@ def inbound_webhook(token):
         account_id=acct.id,
         kind=ActivityKind.NOTE,
         message=msg,
-        payload_json=json.dumps({"raw": data}),
+        payload_json=json.dumps({"event_hash": import_hash, "raw": data}),
     )
     db.session.add(entry)
 
+    pnl_applied = False
     if has_pnl and acct.phase not in (Phase.BREACHED, Phase.PASSED):
         trade = Trade(
             account_id=acct.id,
@@ -798,37 +958,81 @@ def inbound_webhook(token):
             quantity=quantity,
             fill_price=fill_price,
             signal_name="inbound:{}".format(ticker or "unknown"),
+            import_hash=import_hash,
         )
         db.session.add(trade)
         if new_balance is not None:
             acct.current_balance = new_balance
+            _update_webhook_risk_state(acct, user.id)
         else:
-            acct.current_balance = float(acct.current_balance) + pnl
+            _apply_webhook_trade_result(acct, pnl, user.id)
+        pnl_applied = True
 
     elif new_balance is not None and acct.phase not in (Phase.BREACHED, Phase.PASSED):
         # Balance sync without explicit P&L
         acct.current_balance = new_balance
+        _update_webhook_risk_state(acct, user.id)
 
     try:
         db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        if _webhook_event_seen(acct.id, import_hash, has_pnl):
+            return _webhook_duplicate(acct)
+        current_app.logger.exception("Inbound webhook database integrity error")
+        return jsonify({"error": "db error"}), 500
     except Exception:
         db.session.rollback()
+        current_app.logger.exception("Inbound webhook database error")
         return jsonify({"error": "db error"}), 500
 
-    # Forward to TradersPost (or any configured webhook URL) after recording
+    forwarded = None
+    forward_error = None
+    forward_reason = None
     if acct.forward_url:
-        try:
-            import requests as _req
-            _req.post(acct.forward_url, json=data, timeout=5)
-        except Exception:
-            pass
+        if has_pnl or new_balance is not None:
+            forwarded = False
+            forward_reason = "fill_or_balance_update"
+        else:
+            try:
+                import requests
+                response = requests.post(acct.forward_url, json=data, timeout=5)
+                response.raise_for_status()
+                forwarded = True
+            except requests.RequestException as exc:
+                forwarded = False
+                forward_error = type(exc).__name__
+                status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                current_app.logger.warning(
+                    "Webhook forwarding failed for account %s (%s)", acct.id, forward_error
+                )
+                db.session.add(ActivityLog(
+                    user_id=user.id,
+                    account_id=acct.id,
+                    kind=ActivityKind.NOTE,
+                    message="Webhook forwarding failed ({})".format(forward_error),
+                    payload_json=json.dumps({
+                        "event_id": event_id,
+                        "status_code": status_code,
+                        "error_type": forward_error,
+                    }),
+                ))
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    current_app.logger.exception("Could not save webhook forwarding failure")
 
     return jsonify({
         "ok": True,
+        "duplicate": False,
         "account": acct.nickname,
         "direction": direction,
-        "pnl_recorded": pnl,
+        "pnl_recorded": pnl if pnl_applied else None,
         "balance": float(acct.current_balance),
+        "forwarded": forwarded,
+        "forward_error": forward_error,
+        "forward_reason": forward_reason,
     })
 
 

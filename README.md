@@ -86,25 +86,28 @@ No React, no Tailwind, no component library.
 
 ```json
 {
+  "event_id": "{{timenow}}-{{strategy.order.id}}",
   "account": "Flex 50K",
   "ticker": "{{ticker}}",
   "action": "{{strategy.order.action}}",
   "sentiment": "{{strategy.market_position}}",
-  "price": {{close}},
-  "pnl": {{strategy.netprofit}}
+  "price": {{strategy.order.price}}
 }
 ```
 
-Replace `"Flex 50K"` with your account's exact nickname. One URL handles all your accounts — just change the `"account"` field per alert. The match is case-insensitive.
+Replace `"Flex 50K"` with your account's exact nickname. One URL handles all your accounts — just change the `"account"` field per alert. The match is case-insensitive. This sample logs signals only and does not change the account balance.
 
 | Field | Effect |
 |---|---|
 | `account` | Routes the trade to the right account **(required)** |
+| `event_id` | Unique event identifier; required when sending P&L, protects against retried deliveries |
 | `action` | `buy` or `sell` — sets trade direction |
-| `pnl` | Cumulative strategy P&L — balance updates by the delta |
+| `pnl` | Realized P&L for exactly one completed trade; never send a cumulative strategy total |
 | `balance` | Sets the account balance directly |
 | `price` | Records entry/exit price |
 | `quantity` | Contract count |
+
+To update the balance from fills, send realized P&L once when a trade closes and include its stable `event_id` (or `execution_id`, `fill_id`, or `trade_id`). Set `pnl_mode` explicitly to `realized` (or `delta`); the `pnl` value is treated as a per-event amount and added to the balance. Missing modes and cumulative values such as TradingView's `strategy.netprofit` are rejected. After webhook trades arrive, use **Close trading day** on the account page to finalize daily results and EOD drawdown rules. If a TradersPost forward URL is configured, signal-only events may trigger live orders; fill and balance-update events are never forwarded. Failed forwards appear in the Activity log, and a duplicate event ID will not be forwarded again; verify downstream acceptance before sending a new event ID.
 
 ---
 

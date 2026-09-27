@@ -51,20 +51,23 @@
     <button class="btn btn--ghost btn--sm" onclick="copyInboundUrl()">Copy URL</button>
   </div>
 
+  <p style="font-size:12px;color:var(--ink-dim);margin-bottom:.5rem;">This safe example records signal activity only; it does not change your balance. To record fills, send a unique event ID and set <code>pnl_mode</code> to <code>realized</code> (or <code>delta</code>), with P&amp;L once per completed trade. Do not send TradingView's cumulative <code>strategy.netprofit</code> as per-trade P&amp;L. Close the trading day on the account page to apply EOD drawdown rules.</p>
+  <p style="font-size:12px;color:var(--ink-dim);margin-bottom:.5rem;">If a TradersPost forward URL is configured, signal-only events are forwarded there and may trigger live orders; fills and balance updates are never forwarded. Forwarding failures appear in the Activity log, and duplicate event IDs are not forwarded again.</p>
   <p style="font-size:12px;color:var(--ink-dim);margin-bottom:.5rem;">Paste this JSON in your <strong>TradingView alert message</strong> (change the account name to match yours):</p>
   <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;line-height:1.6;overflow-x:auto;margin-bottom:1rem;">{
+  "event_id": "&#123;&#123;timenow&#125;&#125;-&#123;&#123;strategy.order.id&#125;&#125;",
   "account": "{{ cards[0].account.nickname if cards else 'Growth 150k' }}",
   "ticker": "&#123;&#123;ticker&#125;&#125;",
   "action": "&#123;&#123;strategy.order.action&#125;&#125;",
   "sentiment": "&#123;&#123;strategy.market_position&#125;&#125;",
-  "price": &#123;&#123;close&#125;&#125;,
-  "pnl": &#123;&#123;strategy.netprofit&#125;&#125;
+  "price": &#123;&#123;strategy.order.price&#125;&#125;
 }</pre>
 
   <p style="font-size:12px;color:var(--ink-dim);">
-    Fields: <code style="background:var(--border);padding:1px 4px;border-radius:3px;">account</code> (required) ·
+    Fields: <code style="background:var(--border);padding:1px 4px;border-radius:3px;">account</code> (required; nickname match) ·
+    <code style="background:var(--border);padding:1px 4px;border-radius:3px;">event_id</code> (required with P&amp;L; deduplicates retries) ·
     <code style="background:var(--border);padding:1px 4px;border-radius:3px;">action</code> buy/sell ·
-    <code style="background:var(--border);padding:1px 4px;border-radius:3px;">pnl</code> updates balance ·
+    <code style="background:var(--border);padding:1px 4px;border-radius:3px;">pnl</code> realized P&amp;L for one completed trade ·
     <code style="background:var(--border);padding:1px 4px;border-radius:3px;">balance</code> overrides balance directly
   </p>
 </div>
