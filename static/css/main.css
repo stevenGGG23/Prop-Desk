@@ -1499,6 +1499,110 @@ select.input {
 }
 
 /* ---------------------------------------------------------
+   Connect account — firm picker
+   --------------------------------------------------------- */
+.connect-step {
+  margin-bottom: 32px;
+}
+
+.connect-step-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  margin-bottom: 16px;
+}
+
+.connect-step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.connect-firm-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connect-firm-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.firm-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.firm-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+  text-align: center;
+}
+
+.firm-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  transform: translateY(-1px);
+}
+
+.firm-card-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.firm-card-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  line-height: 1.3;
+}
+
+.firm-card:hover .firm-card-name {
+  color: var(--accent);
+}
+
+.preset-btn-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.preset-size-btn {
+  padding: 10px 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.preset-size-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------
    Quick fill section (new account)
    --------------------------------------------------------- */
 .quick-fill-section {

@@ -9,70 +9,70 @@
   </div>
 </div>
 
-{# Step 1: Choose account type #}
-<div class="panel" style="margin-bottom:1rem;">
-  <h2 class="panel-title" style="margin-bottom:1rem;">Step 1 — Choose your account</h2>
-  <p class="text-dim" style="font-size:13px;margin-bottom:.875rem;">
-    Select a preset to auto-fill your account details, or paste JSON from your broker / webhook.
-  </p>
-  <div class="quick-fill-grid" style="margin-bottom:1rem;">
-    <button type="button" class="quick-fill-btn" onclick="applyPreset('tf-growth-150k')">
-      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
-      TF Growth 150k
-    </button>
-    <button type="button" class="quick-fill-btn" onclick="applyPreset('tf-growth-50k')">
-      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
-      TF Growth 50k
-    </button>
-    <button type="button" class="quick-fill-btn" onclick="applyPreset('tf-select-50k')">
-      <img src="{{ url_for('static', filename='brand/firms/tradeify.svg') }}" class="firm-logo-sm" alt="">
-      TF Select 50k
-    </button>
-    <button type="button" class="quick-fill-btn" onclick="applyPreset('lucid-150k')">
-      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.svg') }}" class="firm-logo-sm" alt="">
-      Lucid Flex 150K
-    </button>
-    <button type="button" class="quick-fill-btn" onclick="applyPreset('lucid-50k')">
-      <img src="{{ url_for('static', filename='brand/firms/lucid-trading.svg') }}" class="firm-logo-sm" alt="">
-      Lucid Flex 50K
-    </button>
-  </div>
+{# ── Step 1: Firm picker ── #}
+<div id="step-firm" class="connect-step">
+  <p class="connect-step-label">Step 1 — Choose your prop firm</p>
+  <div class="firm-picker-grid">
 
-  <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.875rem;">
-    <div style="flex:1;height:1px;background:var(--border);"></div>
-    <span class="text-dim" style="font-size:12px;">or paste JSON</span>
-    <div style="flex:1;height:1px;background:var(--border);"></div>
-  </div>
+    {% set firms_with_logo = [
+      ('Tradeify',            'tradeify',           'tradeify.svg'),
+      ('Lucid Trading',       'lucid-trading',      'lucid-trading.svg'),
+      ('Topstep',             'topstep',            'topstep.svg'),
+      ('Apex Trader Funding', 'apex',               'apex.svg'),
+      ('My Funded Futures',   'mff',                'mff.svg'),
+      ('Take Profit Trader',  'tpt',                'tpt.svg'),
+      ('TradeDay',            'tradeday',           'tradeday.svg'),
+      ('FundedNext',          'fundednext',         'funded-next.svg'),
+      ('Blue Guardian',       'blue-guardian',      'blue-guardian.svg'),
+      ('GoatFunded',          'goatfunded',         'goatfunded.svg'),
+      ('Legends Trading',     'legends-trading',    'legends-trading.svg'),
+      ('Trading Pit',         'trading-pit',        'trading-pit.svg'),
+      ('Funded Futures Family','fff',               'fff.svg'),
+      ('Elite Trader Funding','elite-trader',       'elite-trader.svg'),
+      ('Alpha Futures',       'alpha-futures',      'alpha-futures.svg'),
+      ('LifeUp Trading',      'lifeup-trading',     'lifeup-trading.svg'),
+      ('FundingTicks',        'fundingticks',       'fundingticks.svg'),
+      ('TickTickTrader',      'tickticktrader',     'tickticktrader.svg'),
+      ('Alpha Ticks',         'alpha-ticks',        'alpha-ticks.svg'),
+      ('FXIFY Futures',       'fxify',              'fxify.svg'),
+      ('Funding Futures',     'funding-futures',    'funding-futures.svg'),
+      ('Emerge Profit',       'emerge-profit',      'emerge-profit.svg'),
+      ('Alpha Trader',        'alpha-trader',       'alpha-trader.svg'),
+      ('OneUp Trader',        'oneup',              'oneup.svg'),
+      ('Tradefundrr',         'tradefundrr',        'tradefundrr.svg'),
+    ] %}
 
-  <textarea class="input" id="json-paste-input" rows="5" style="font-family:monospace;font-size:12px;margin-bottom:.5rem;"
-            placeholder='{"firm":"tradeify","nickname":"Growth 150k","starting_balance":150000,"drawdown_amount":5000,...}'></textarea>
-  <div style="display:flex;align-items:center;gap:.75rem;">
-    <button type="button" class="btn btn--ghost btn--sm" id="apply-json-btn">Apply JSON</button>
-    <span id="json-paste-status" style="font-size:12px;"></span>
+    {% for name, slug, logo in firms_with_logo %}
+    <button type="button" class="firm-card" onclick="selectFirm('{{ slug }}', '{{ name }}', '{{ logo }}')">
+      <img src="{{ url_for('static', filename='brand/firms/' + logo) }}"
+           alt="{{ name }}" class="firm-card-logo"
+           onerror="this.style.display='none'">
+      <span class="firm-card-name">{{ name }}</span>
+    </button>
+    {% endfor %}
+
   </div>
 </div>
 
-{# Step 2: Review (revealed after preset/JSON applied) #}
-<div id="review-section" style="display:none;">
-  <div class="panel" style="margin-bottom:1rem;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-      <h2 class="panel-title">Step 2 — Review &amp; connect</h2>
-      <button type="button" class="btn btn--ghost btn--sm" id="toggle-edit-btn" onclick="toggleEdit()">Edit details</button>
-    </div>
-
-    {# Read-only summary — shown by default #}
-    <div id="review-summary" class="field-row" style="gap:1.5rem;flex-wrap:wrap;">
-      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">FIRM</span><span id="sum-firm" class="num" style="font-weight:600;">—</span></div>
-      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">NICKNAME</span><span id="sum-nickname" style="font-weight:600;">—</span></div>
-      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">PHASE</span><span id="sum-phase">—</span></div>
-      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">STARTING BALANCE</span><span id="sum-start" class="num">—</span></div>
-      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">DRAWDOWN</span><span id="sum-dd" class="num">—</span></div>
-      <div><span class="text-dim" style="font-size:11px;display:block;margin-bottom:2px;">PROFIT TARGET</span><span id="sum-target" class="num">—</span></div>
+{# ── Step 2: Presets for selected firm ── #}
+<div id="step-preset" class="connect-step" style="display:none;">
+  <div class="connect-step-header">
+    <button type="button" class="btn btn--ghost btn--sm" onclick="resetFirm()">← Back</button>
+    <div class="connect-firm-title">
+      <img id="preset-firm-logo" src="" alt="" class="firm-logo-sm">
+      <span id="preset-firm-name" class="connect-firm-label"></span>
     </div>
   </div>
+  <p class="connect-step-label">Step 2 — Choose account type</p>
+  <div id="preset-buttons" class="preset-btn-grid"></div>
+  <button type="button" class="btn btn--ghost btn--sm" style="margin-top:8px;" onclick="selectCustom()">
+    + Custom / enter manually
+  </button>
+</div>
 
-  {# Edit form — hidden by default #}
-  <div id="edit-form-wrap" style="display:none;">
+{# ── Step 3: Full form ── #}
+<div id="step-form" class="connect-step" style="display:none;">
+  <p class="connect-step-label">Step 3 — Review &amp; connect</p>
   <div class="form-card">
   <form method="POST" id="new-account-form" action="{{ url_for('accounts.new_account') }}">
 
@@ -211,26 +211,59 @@
 
   </form>
   </div>
-  </div>
-
-  {# Connect button shown when review is in summary mode #}
-  <div id="connect-btn-wrap" style="margin-top:1rem;">
-    <button type="button" class="btn btn--primary" onclick="document.getElementById('new-account-form').submit()">
-      Connect account
-    </button>
-    <a href="{{ url_for('accounts.dashboard') }}" class="btn btn--ghost" style="margin-left:.5rem;">Cancel</a>
-  </div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-function firmIdFor(slug) {
+const SLUG_TO_FIRM_NAME = {
+  'tradeify': 'tradeify', 'lucid-trading': 'lucid', 'lucid': 'lucid',
+  'topstep': 'topstep', 'apex': 'apex', 'mff': 'funded',
+  'tpt': 'profit', 'tradeday': 'tradeday',
+};
+
+const PRESETS = {
+  'tradeify': [
+    { label: 'Growth 150k', data: { firm:'tradeify', phase:'EVAL', nickname:'Growth 150k', starting_balance:150000, current_balance:150000, drawdown_amount:5000, current_mll:145000, lock_threshold:150100, profit_target:9000, contract_cap:120, current_risk:1600 } },
+    { label: 'Growth 50k',  data: { firm:'tradeify', phase:'EVAL', nickname:'Growth 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2000, current_mll:48000,  lock_threshold:50100,  profit_target:3000, contract_cap:40,  current_risk:400  } },
+    { label: 'Select 50k',  data: { firm:'tradeify', phase:'EVAL', nickname:'Select 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2000, current_mll:48000,  lock_threshold:50100,  profit_target:3000, consistency_pct:40, contract_cap:40, current_risk:640 } },
+  ],
+  'lucid-trading': [
+    { label: 'Flex 150K', data: { firm:'lucid', phase:'EVAL', nickname:'Flex 150K', starting_balance:150000, current_balance:150000, drawdown_amount:4500, current_mll:145500, lock_threshold:150100, profit_target:9000,  daily_loss_limit:2700, consistency_pct:50, contract_cap:100, current_risk:1750 } },
+    { label: 'Flex 50K',  data: { firm:'lucid', phase:'EVAL', nickname:'Flex 50K',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2000, current_mll:48000,  lock_threshold:50100,  profit_target:3000,  consistency_pct:50, contract_cap:40,  current_risk:850  } },
+  ],
+  'topstep': [
+    { label: '150k Express', data: { firm:'topstep', phase:'EVAL', nickname:'Topstep 150k', starting_balance:150000, current_balance:150000, drawdown_amount:4500, profit_target:9000,  daily_loss_limit:4500, contract_cap:15 } },
+    { label: '50k Express',  data: { firm:'topstep', phase:'EVAL', nickname:'Topstep 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2000, profit_target:3000,  daily_loss_limit:2000, contract_cap:5  } },
+    { label: '25k Express',  data: { firm:'topstep', phase:'EVAL', nickname:'Topstep 25k',  starting_balance:25000,  current_balance:25000,  drawdown_amount:1500, profit_target:1500,  daily_loss_limit:1500, contract_cap:3  } },
+  ],
+  'apex': [
+    { label: '150k', data: { firm:'apex', phase:'EVAL', nickname:'Apex 150k', starting_balance:150000, current_balance:150000, drawdown_amount:5000, profit_target:9000,  daily_loss_limit:2500, drawdown_type:'EOD_TRAILING' } },
+    { label: '100k', data: { firm:'apex', phase:'EVAL', nickname:'Apex 100k', starting_balance:100000, current_balance:100000, drawdown_amount:3000, profit_target:6000,  daily_loss_limit:2000, drawdown_type:'EOD_TRAILING' } },
+    { label: '50k',  data: { firm:'apex', phase:'EVAL', nickname:'Apex 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2500, profit_target:3000,  daily_loss_limit:1000, drawdown_type:'EOD_TRAILING' } },
+    { label: '25k',  data: { firm:'apex', phase:'EVAL', nickname:'Apex 25k',  starting_balance:25000,  current_balance:25000,  drawdown_amount:1500, profit_target:1500,  daily_loss_limit:500,  drawdown_type:'EOD_TRAILING' } },
+  ],
+  'mff': [
+    { label: '150k', data: { firm:'funded', phase:'EVAL', nickname:'MFF 150k', starting_balance:150000, current_balance:150000, drawdown_amount:5000, profit_target:9000  } },
+    { label: '50k',  data: { firm:'funded', phase:'EVAL', nickname:'MFF 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2500, profit_target:3000  } },
+  ],
+  'tpt': [
+    { label: '150k', data: { firm:'profit', phase:'EVAL', nickname:'TPT 150k', starting_balance:150000, current_balance:150000, drawdown_amount:5000, profit_target:9000,  daily_loss_limit:2000 } },
+    { label: '50k',  data: { firm:'profit', phase:'EVAL', nickname:'TPT 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2000, profit_target:3000,  daily_loss_limit:1000 } },
+  ],
+  'tradeday': [
+    { label: '150k', data: { firm:'tradeday', phase:'EVAL', nickname:'TradeDay 150k', starting_balance:150000, current_balance:150000, drawdown_amount:4500, profit_target:9000  } },
+    { label: '50k',  data: { firm:'tradeday', phase:'EVAL', nickname:'TradeDay 50k',  starting_balance:50000,  current_balance:50000,  drawdown_amount:2000, profit_target:3000  } },
+  ],
+};
+
+function firmIdFor(partialName) {
   const sel = document.getElementById('firm_id');
   if (!sel) return '';
+  const lc = partialName.toLowerCase();
   for (let opt of sel.options) {
-    if (opt.text.toLowerCase().includes(slug)) return opt.value;
+    if (opt.text.toLowerCase().includes(lc)) return opt.value;
   }
   return '';
 }
@@ -242,133 +275,74 @@ function set(id, val) {
   else el.value = (val === null || val === undefined) ? '' : val;
 }
 
-function updateSummary(data) {
-  const firmSel = document.getElementById('firm_id');
-  const firmName = firmSel ? firmSel.options[firmSel.selectedIndex]?.text : '—';
-  document.getElementById('sum-firm').textContent = firmName || '—';
-  document.getElementById('sum-nickname').textContent = document.getElementById('nickname')?.value || '—';
-  document.getElementById('sum-phase').textContent = document.getElementById('phase')?.value || '—';
-  const sb = document.getElementById('starting_balance')?.value;
-  document.getElementById('sum-start').textContent = sb ? '$' + parseFloat(sb).toLocaleString() : '—';
-  const dd = document.getElementById('drawdown_amount')?.value;
-  document.getElementById('sum-dd').textContent = dd ? '$' + parseFloat(dd).toLocaleString() : '—';
-  const pt = document.getElementById('profit_target')?.value;
-  document.getElementById('sum-target').textContent = pt ? '$' + parseFloat(pt).toLocaleString() : '—';
-  document.getElementById('review-section').style.display = 'block';
-}
-
-function toggleEdit() {
-  const wrap = document.getElementById('edit-form-wrap');
-  const btn = document.getElementById('toggle-edit-btn');
-  const connectBtn = document.getElementById('connect-btn-wrap');
-  if (wrap.style.display === 'none') {
-    wrap.style.display = 'block';
-    connectBtn.style.display = 'none';
-    btn.textContent = 'Hide';
-  } else {
-    wrap.style.display = 'none';
-    connectBtn.style.display = 'block';
-    btn.textContent = 'Edit details';
-  }
-}
-
-const keyMap = {
-  nickname: 'nickname', external_id: 'external_id',
-  starting_balance: 'starting_balance', current_balance: 'current_balance',
-  cost_paid: 'cost_paid', drawdown_amount: 'drawdown_amount',
-  current_mll: 'current_mll', max_loss_limit: 'current_mll',
-  lock_threshold: 'lock_threshold', profit_target: 'profit_target',
-  daily_loss_limit: 'daily_loss_limit', consistency_pct: 'consistency_pct',
-  contract_cap: 'contract_cap', current_risk: 'current_risk',
-  best_day_so_far: 'best_day_so_far',
-};
-
-function applyData(data) {
-  let filled = 0;
-  Object.entries(data).forEach(([key, val]) => {
-    if (key === 'firm') {
-      const fid = firmIdFor(String(val).toLowerCase());
-      if (fid) { set('firm_id', fid); filled++; }
-    } else if (key === 'phase') {
-      set('phase', String(val).toUpperCase()); filled++;
-    } else if (keyMap[key]) {
-      set(keyMap[key], val === null ? '' : val); filled++;
+function applyPresetData(data) {
+  Object.entries(data).forEach(([k, v]) => {
+    if (k === 'firm') { set('firm_id', firmIdFor(v)); }
+    else if (k === 'phase') { set('phase', String(v).toUpperCase()); }
+    else if (k === 'drawdown_type') { set('drawdown_type', v); }
+    else {
+      const map = {
+        nickname:'nickname', external_id:'external_id',
+        starting_balance:'starting_balance', current_balance:'current_balance',
+        cost_paid:'cost_paid', drawdown_amount:'drawdown_amount',
+        current_mll:'current_mll', lock_threshold:'lock_threshold',
+        profit_target:'profit_target', daily_loss_limit:'daily_loss_limit',
+        consistency_pct:'consistency_pct', contract_cap:'contract_cap',
+        current_risk:'current_risk', best_day_so_far:'best_day_so_far',
+      };
+      if (map[k]) set(map[k], v === null ? '' : v);
     }
   });
-  updateSummary(data);
-  return filled;
 }
 
-document.getElementById('apply-json-btn').addEventListener('click', function() {
-  const statusEl = document.getElementById('json-paste-status');
-  let data;
-  try {
-    data = JSON.parse(document.getElementById('json-paste-input').value.trim());
-  } catch(e) {
-    statusEl.style.color = '#f87171';
-    statusEl.textContent = 'Invalid JSON: ' + e.message;
-    return;
-  }
-  const filled = applyData(data);
-  statusEl.style.color = '#4ade80';
-  statusEl.textContent = filled + ' field(s) applied.';
-});
+let _selectedSlug = '';
+let _selectedName = '';
+let _selectedLogo = '';
 
-function applyPreset(key) {
-  const p = PRESETS[key];
-  if (!p) return;
-  Object.entries(p).forEach(([k, v]) => {
-    if (k === 'firm') { set('firm_id', firmIdFor(v)); }
-    else if (k === 'phase') { set('phase', v); }
-    else if (keyMap[k]) { set(keyMap[k], v === null || v === undefined ? '' : v); }
+function selectFirm(slug, name, logo) {
+  _selectedSlug = slug;
+  _selectedName = name;
+  _selectedLogo = logo;
+
+  // Update preset step header
+  const logoEl = document.getElementById('preset-firm-logo');
+  logoEl.src = '/static/brand/firms/' + logo;
+  logoEl.alt = name;
+  document.getElementById('preset-firm-name').textContent = name;
+
+  // Build preset buttons
+  const grid = document.getElementById('preset-buttons');
+  grid.innerHTML = '';
+  const presets = PRESETS[slug] || [];
+  presets.forEach(p => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'preset-size-btn';
+    btn.textContent = p.label;
+    btn.onclick = () => { applyPresetData(p.data); showForm(); };
+    grid.appendChild(btn);
   });
-  set('drawdown_type', 'EOD_TRAILING');
-  set('nickname', p.nickname);
-  set('external_id', p.external_id || '');
-  updateSummary(p);
+
+  document.getElementById('step-firm').style.display = 'none';
+  document.getElementById('step-preset').style.display = 'block';
+  document.getElementById('step-form').style.display = 'none';
 }
 
-const PRESETS = {
-  'tf-growth-150k': {
-    firm: 'tradeify', phase: 'EVAL',
-    nickname: 'Growth 150k', external_id: 'TDFYG150794989845',
-    starting_balance: 150000, current_balance: 150000, cost_paid: '',
-    drawdown_amount: 5000, current_mll: 145000, lock_threshold: 150100,
-    profit_target: 9000, daily_loss_limit: '', consistency_pct: '',
-    contract_cap: 120, current_risk: 1600, best_day_so_far: 0,
-  },
-  'tf-growth-50k': {
-    firm: 'tradeify', phase: 'EVAL',
-    nickname: 'Growth 50k', external_id: 'TDFYG50581241487',
-    starting_balance: 50000, current_balance: 52905.20, cost_paid: '',
-    drawdown_amount: 2000, current_mll: 50905.20, lock_threshold: 50100,
-    profit_target: 3000, daily_loss_limit: '', consistency_pct: '',
-    contract_cap: 40, current_risk: 200, best_day_so_far: 0,
-  },
-  'tf-select-50k': {
-    firm: 'tradeify', phase: 'EVAL',
-    nickname: 'Select 50k', external_id: 'TDFYSL50224996265',
-    starting_balance: 50000, current_balance: 50933.30, cost_paid: 99,
-    drawdown_amount: 2000, current_mll: 48933.30, lock_threshold: 50100,
-    profit_target: 3000, daily_loss_limit: '', consistency_pct: 40,
-    contract_cap: 40, current_risk: 640, best_day_so_far: 516,
-  },
-  'lucid-150k': {
-    firm: 'lucid', phase: 'EVAL',
-    nickname: 'Flex 150K', external_id: 'LFE15092522790001',
-    starting_balance: 150000, current_balance: 152130, cost_paid: 250.40,
-    drawdown_amount: 4500, current_mll: 146661, lock_threshold: 150100,
-    profit_target: 9000, daily_loss_limit: 2700, consistency_pct: 50,
-    contract_cap: 100, current_risk: 1750, best_day_so_far: 1410,
-  },
-  'lucid-50k': {
-    firm: 'lucid', phase: 'EVAL',
-    nickname: 'Flex 50K', external_id: 'LFE05092522790001',
-    starting_balance: 50000, current_balance: 51865, cost_paid: '',
-    drawdown_amount: 2000, current_mll: 49169, lock_threshold: 50100,
-    profit_target: 3000, daily_loss_limit: '', consistency_pct: 50,
-    contract_cap: 40, current_risk: 850, best_day_so_far: 754,
-  },
-};
+function selectCustom() {
+  // Pre-fill firm from selected slug
+  set('firm_id', firmIdFor(_selectedName));
+  showForm();
+}
+
+function showForm() {
+  document.getElementById('step-form').style.display = 'block';
+  document.getElementById('step-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function resetFirm() {
+  document.getElementById('step-firm').style.display = 'block';
+  document.getElementById('step-preset').style.display = 'none';
+  document.getElementById('step-form').style.display = 'none';
+}
 </script>
 {% endblock %}
