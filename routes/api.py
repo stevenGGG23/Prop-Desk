@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 
 from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, current_app, render_template
-from flask_wtf.csrf import csrf_exempt
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError

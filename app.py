@@ -74,6 +74,11 @@ def create_app(env=None):
     app.register_blueprint(trades_bp)
     app.register_blueprint(api_bp)
 
+    # Public webhook endpoints are authenticated by token, not session — exempt from CSRF
+    from routes.api import receive_webhook, inbound_webhook
+    csrf.exempt(receive_webhook)
+    csrf.exempt(inbound_webhook)
+
     from cli import register_cli
     register_cli(app)
 
