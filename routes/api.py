@@ -611,7 +611,11 @@ def receive_webhook(token):
 
     acct = Account.query.get(receiver.account_id)
 
-    # Try to extract P&L from the payload (TradersPost fill format or generic)
+    # Try to extract P&L from the payload
+    # NOTE: Standard TradersPost entry signals {"ticker":"MNQ","action":"buy"}
+    # do NOT include P&L — that field only appears in close/fill notifications.
+    # Without P&L we log the signal as a NOTE so you can see activity, but
+    # the balance is not changed.
     pnl = None
     for key in ("pnl", "profit", "net_profit", "net_pnl", "realizedPnl", "realized_pnl"):
         if key in data:
@@ -621,38 +625,33 @@ def receive_webhook(token):
             except (TypeError, ValueError):
                 pass
 
-    # Store as a BotEvent (visible in Bots → Events log)
-    source_key = hashlib.sha256(
-        "{}:{}:{}".format(token, receiver.last_received_at.isoformat(), json.dumps(data, sort_keys=True)).encode()
-    ).hexdigest()[:32]
+    ticker = data.get("ticker", "")
+    action = (data.get("action", "") or "").upper()
+    has_pnl = pnl is not None and math.isfinite(pnl)
 
-    event = BotEvent(
-        bot_id=None,  # no bot attached to raw webhook
-        account_id=acct.id,
-        event_type="WEBHOOK_FILL",
-        message="Webhook from {}: {}".format(receiver.source, json.dumps(data)),
-        event_at=datetime.now(timezone.utc),
-        source_key=source_key,
-    )
-    # BotEvent requires bot_id — use a sentinel approach: only add if bot exists
-    # Otherwise log as ActivityLog so it always persists
+    if has_pnl:
+        msg = "Webhook fill from {}: {} {} pnl={:+.2f}".format(
+            receiver.source, action, ticker, pnl)
+    else:
+        msg = "Webhook signal from {}: {} {} (no P&L in payload — balance unchanged)".format(
+            receiver.source, action, ticker)
+
     entry = ActivityLog(
         user_id=acct.user_id,
         account_id=acct.id,
         kind=ActivityKind.NOTE,
-        message="Webhook received from {}: {}".format(
-            receiver.source, json.dumps(data)[:500]),
+        message=msg,
         payload_json=json.dumps({"token_prefix": token[:8], "pnl": pnl, "raw": data}),
     )
     db.session.add(entry)
 
-    # If pnl is present, create a Trade record so the balance updates
-    if pnl is not None and math.isfinite(pnl) and acct.phase not in (Phase.BREACHED, Phase.PASSED):
+    # Only update balance if the payload actually contains a realized P&L
+    if has_pnl and acct.phase not in (Phase.BREACHED, Phase.PASSED):
         trade = Trade(
             account_id=acct.id,
             opened_at=datetime.now(timezone.utc),
             pnl=pnl,
-            direction=(data.get("action", "") or "").upper()[:5] or None,
+            direction=action[:5] or None,
             quantity=data.get("quantity") or data.get("contracts") or None,
             fill_price=data.get("price") or data.get("fill_price") or None,
             signal_name="webhook:{}".format(receiver.source),
@@ -666,7 +665,7 @@ def receive_webhook(token):
         db.session.rollback()
         return jsonify({"error": "db error"}), 500
 
-    return jsonify({"ok": True, "pnl_recorded": pnl})
+    return jsonify({"ok": True, "pnl_recorded": pnl, "signal": action or None})
 
 
 # ---------------------------------------------------------------------------
