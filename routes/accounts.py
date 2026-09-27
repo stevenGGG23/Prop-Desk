@@ -156,7 +156,11 @@ def _consistency_flags(account):
 
 
 def _days_to_target(account):
-    """Estimate calendar days remaining to hit profit_target based on recent PnL."""
+    """Estimate calendar days remaining to hit profit_target.
+
+    Uses recent daily_results if available; falls back to overall elapsed
+    account time so new accounts with any profit still show an estimate.
+    """
     if not account.profit_target:
         return None
     target = float(account.profit_target)
@@ -165,20 +169,25 @@ def _days_to_target(account):
     if remaining <= 0:
         return 0  # already hit
 
+    # Primary: average from recent daily_results (most accurate)
     results = (account.daily_results
                .order_by(DailyResult.trade_date.desc())
                .limit(20)
                .all())
-    if not results:
+    if results:
+        avg_daily = sum(float(r.pnl) for r in results) / len(results)
+    else:
+        # Fallback: overall account elapsed time since opening
+        days_elapsed = (date.today() - account.opened_at.date()).days
+        if days_elapsed > 0 and profit > 0:
+            avg_daily = profit / days_elapsed
+        else:
+            return None
+
+    if avg_daily <= 0:
         return None
 
-    avg_daily = sum(float(r.pnl) for r in results) / len(results)
-    if avg_daily <= 0:
-        return None  # flat or losing — can't estimate
-
-    # trading days to target
     trading_days = math.ceil(remaining / avg_daily)
-    # calendar days ≈ trading days / (5/7) / signal_frequency
     calendar_days = math.ceil(trading_days / (5 / 7))
     return {"trading": trading_days, "calendar": calendar_days, "remaining": round(remaining, 2)}
 

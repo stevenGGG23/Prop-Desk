@@ -178,3 +178,47 @@ def withdrawal_discipline_curve(
         })
 
     return results
+
+
+def sample_equity_paths(
+    current_balance: float,
+    max_loss_limit: float,
+    drawdown_amount: float,
+    lock_threshold: float,
+    win_multiples: list[float],
+    loss_multiples: list[float],
+    risk: float,
+    base_risk: float = 1000.0,
+    signal_frequency: float = 0.68,
+    n_paths: int = 20,
+    n_days: int = 90,
+    rng=None,
+) -> list[list[float]]:
+    """Return n_paths simulated balance paths over n_days trading days."""
+    if rng is None:
+        rng = np.random.default_rng()
+    wins = np.array([m for m in win_multiples if m > 0], dtype=float)
+    losses = np.array([m for m in loss_multiples if m < 0], dtype=float)
+    win_prob = len(wins) / (len(wins) + len(losses))
+    paths = []
+    for _ in range(n_paths):
+        bal = current_balance
+        peak = current_balance
+        floor = max_loss_limit
+        path = [round(bal, 2)]
+        for _ in range(n_days):
+            if rng.random() > signal_frequency:
+                path.append(round(bal, 2))
+                continue
+            multiple = rng.choice(wins) if rng.random() < win_prob else rng.choice(losses)
+            bal += risk * float(multiple)
+            if floor < lock_threshold:
+                if bal > peak:
+                    peak = bal
+                floor = min(peak - drawdown_amount, lock_threshold)
+            if bal <= floor:
+                path.extend([round(floor, 2)] * (n_days - len(path) + 1))
+                break
+            path.append(round(bal, 2))
+        paths.append(path[:n_days + 1])
+    return paths

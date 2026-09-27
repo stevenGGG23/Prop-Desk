@@ -61,6 +61,14 @@
 </div>
 
 {% if result %}
+{# ── TradingView-style simulated equity paths ── #}
+<div class="panel" style="margin-bottom:1.5rem;">
+  <h2 class="panel-title">Simulated equity paths <span style="font-weight:400;font-size:12px;color:var(--ink-dim);">30 paths · 90 trading days</span></h2>
+  <div class="chart-wrap" style="height:320px;">
+    <canvas id="equity-paths-chart"></canvas>
+  </div>
+  <p class="hint" style="margin-top:.5rem;">Each line is one Monte Carlo path. Grey = breach path. Green = survival path. The floor line is shown in orange.</p>
+</div>
 <p class="projection-assumptions">{{ selected.nickname }} · {{ selected.distribution.name }} · {{ result.n_runs }} simulated 90-day paths</p>
 <div class="metrics-row">
   <div class="metric-box">
@@ -129,6 +137,78 @@ new Chart(document.getElementById('payout-curve'), {
     }
   }
 });
+</script>
+{% endif %}
+{% if equity_paths %}
+<script>
+(function() {
+  const paths = {{ equity_paths | tojson }};
+  const startBal = {{ selected.current_balance | float }};
+  const floor = {{ selected.max_loss_limit | float }};
+  const labels = Array.from({length: 91}, (_, i) => i === 0 ? 'Start' : 'D' + i);
+
+  const datasets = paths.map((path, i) => {
+    const last = path[path.length - 1];
+    const breached = last <= floor + 1;
+    return {
+      data: path,
+      borderColor: breached ? 'rgba(220,38,38,0.25)' : 'rgba(22,163,74,0.25)',
+      borderWidth: 1,
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+    };
+  });
+
+  // Floor line
+  datasets.push({
+    label: 'Floor',
+    data: Array(91).fill(floor),
+    borderColor: '#f97316',
+    borderWidth: 1.5,
+    borderDash: [4, 4],
+    pointRadius: 0,
+    fill: false,
+  });
+
+  // Start balance reference
+  datasets.push({
+    label: 'Start',
+    data: Array(91).fill(startBal),
+    borderColor: 'rgba(100,116,139,0.4)',
+    borderWidth: 1,
+    borderDash: [2, 4],
+    pointRadius: 0,
+    fill: false,
+  });
+
+  new Chart(document.getElementById('equity-paths-chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#64748b', maxTicksLimit: 10 },
+          grid: { color: 'rgba(34,44,58,0.4)' },
+        },
+        y: {
+          ticks: {
+            color: '#64748b',
+            callback: v => '$' + Number(v).toLocaleString(),
+          },
+          grid: { color: 'rgba(34,44,58,0.4)' },
+        },
+      },
+    },
+  });
+})();
 </script>
 {% endif %}
 {% endblock %}

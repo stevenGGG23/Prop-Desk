@@ -48,10 +48,6 @@
          class="nav-link {% if request.endpoint == 'log.activity_log' %}is-active{% endif %}">
         Log
       </a>
-      <a href="{{ url_for('bots.index') }}"
-         class="nav-link {% if request.endpoint in ['bots.index', 'bots.add_event'] %}is-active{% endif %}">
-        Bots
-      </a>
       <a href="{{ url_for('api.imports_page') }}"
          class="nav-link {% if request.endpoint == 'api.imports_page' %}is-active{% endif %}">
         Import

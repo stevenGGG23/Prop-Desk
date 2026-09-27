@@ -3,7 +3,7 @@ import math
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from engine.funded import simulate_funded_monthly, withdrawal_discipline_curve
+from engine.funded import simulate_funded_monthly, withdrawal_discipline_curve, sample_equity_paths
 from models import Account
 
 bp = Blueprint("projections", __name__)
@@ -23,6 +23,7 @@ def index():
     values = {}
     result = None
     curve = []
+    equity_paths = []
     if selected:
         floor = float(selected.max_loss_limit)
         values = {
@@ -88,6 +89,19 @@ def index():
             "qualifying_day_min": values["qualifying_day_min"],
         }
         result = simulate_funded_monthly(**common, n_runs=2500)
+        equity_paths = sample_equity_paths(
+            current_balance=float(selected.current_balance),
+            max_loss_limit=float(selected.max_loss_limit),
+            drawdown_amount=float(selected.drawdown_amount),
+            lock_threshold=float(selected.lock_threshold),
+            win_multiples=distribution.win_multiples,
+            loss_multiples=distribution.loss_multiples,
+            risk=values["risk"],
+            base_risk=float(distribution.base_risk),
+            signal_frequency=float(distribution.signal_frequency),
+            n_paths=30,
+            n_days=90,
+        )
         cushion_step = max(float(selected.drawdown_amount) / 10, 1)
         curve = withdrawal_discipline_curve(
             **{key: value for key, value in common.items() if key != "min_balance_to_withdraw"},
@@ -97,4 +111,5 @@ def index():
         )
 
     return render_template("projections.html", accounts=eligible, selected=selected,
-                           values=values, result=result, curve=curve)
+                           values=values, result=result, curve=curve,
+                           equity_paths=equity_paths)

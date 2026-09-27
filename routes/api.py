@@ -684,7 +684,7 @@ def send_daily_report():
     from email.mime.text import MIMEText
     from flask import current_app
 
-    gmail_password = current_app.config.get("GMAIL_APP_PASSWORD", "")
+    gmail_password = (current_app.config.get("GMAIL_APP_PASSWORD", "") or "").replace(" ", "")
     if not gmail_password:
         return jsonify({"error": "GMAIL_APP_PASSWORD not set. Add it to Render environment variables."}), 422
 
@@ -764,10 +764,17 @@ def send_daily_report():
     msg["To"] = gmail_address
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(gmail_address, gmail_password)
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
+                server.login(gmail_address, gmail_password)
+                server.send_message(msg)
+        except (smtplib.SMTPException, OSError):
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(gmail_address, gmail_password)
+                server.send_message(msg)
     except Exception as exc:
-        return jsonify({"error": "Gmail send failed: {}".format(str(exc))}), 500
+        return jsonify({"error": "Gmail send failed: {}. Make sure GMAIL_APP_PASSWORD is a 16-char Google App Password (no spaces).".format(str(exc))}), 500
 
     return jsonify({"ok": True, "sent_to": gmail_address})

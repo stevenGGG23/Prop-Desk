@@ -9,6 +9,21 @@
   </div>
 </div>
 
+{# ── JSON paste quick-setup ── #}
+<div class="panel" style="margin-bottom:1rem;">
+  <div class="panel-header">
+    <h2 class="panel-title">Quick setup — paste JSON</h2>
+    <button type="button" class="btn btn--ghost btn--sm" id="toggle-json-paste">Show</button>
+  </div>
+  <div id="json-paste-area" style="display:none;margin-top:.75rem;">
+    <p class="panel-note" style="margin-bottom:.5rem;">Paste a JSON object with any account fields and they'll fill in automatically. Supported keys: firm (name or slug), nickname, external_id, starting_balance, current_balance, drawdown_amount, max_loss_limit (or current_mll), lock_threshold, profit_target, daily_loss_limit, consistency_pct, contract_cap, current_risk, best_day_so_far, cost_paid, phase.</p>
+    <textarea class="input" id="json-paste-input" rows="6" style="font-family:monospace;font-size:12px;"
+              placeholder='{"firm":"tradeify","nickname":"Growth 150k","starting_balance":150000,"drawdown_amount":5000,...}'></textarea>
+    <button type="button" class="btn btn--primary btn--sm" style="margin-top:.5rem;" id="apply-json-btn">Apply JSON</button>
+    <span id="json-paste-error" style="color:#f87171;font-size:12px;margin-left:.75rem;"></span>
+  </div>
+</div>
+
 {# ── Pre-fill presets ── #}
 <div class="quick-fill-section">
   <p class="text-dim" style="font-size:12px;margin-bottom:10px;">Quick-fill from your accounts:</p>
@@ -225,6 +240,59 @@ function set(id, val) {
     el.value = (val === null || val === undefined) ? '' : val;
   }
 }
+
+// JSON paste quick-setup
+document.getElementById('toggle-json-paste').addEventListener('click', function() {
+  const area = document.getElementById('json-paste-area');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+  this.textContent = area.style.display === 'none' ? 'Show' : 'Hide';
+});
+
+document.getElementById('apply-json-btn').addEventListener('click', function() {
+  const errEl = document.getElementById('json-paste-error');
+  errEl.textContent = '';
+  let data;
+  try {
+    data = JSON.parse(document.getElementById('json-paste-input').value.trim());
+  } catch(e) {
+    errEl.textContent = 'Invalid JSON: ' + e.message;
+    return;
+  }
+  // Map keys to form fields
+  const keyMap = {
+    nickname: 'nickname',
+    external_id: 'external_id',
+    starting_balance: 'starting_balance',
+    current_balance: 'current_balance',
+    cost_paid: 'cost_paid',
+    drawdown_amount: 'drawdown_amount',
+    current_mll: 'current_mll',
+    max_loss_limit: 'current_mll',
+    lock_threshold: 'lock_threshold',
+    profit_target: 'profit_target',
+    daily_loss_limit: 'daily_loss_limit',
+    consistency_pct: 'consistency_pct',
+    contract_cap: 'contract_cap',
+    current_risk: 'current_risk',
+    best_day_so_far: 'best_day_so_far',
+  };
+  let filled = 0;
+  Object.entries(data).forEach(([key, val]) => {
+    if (key === 'firm') {
+      const fid = firmIdFor(String(val).toLowerCase());
+      if (fid) { set('firm_id', fid); filled++; }
+    } else if (key === 'phase') {
+      set('phase', String(val).toUpperCase());
+      filled++;
+    } else if (keyMap[key]) {
+      set(keyMap[key], val === null ? '' : val);
+      filled++;
+    }
+  });
+  errEl.style.color = '#4ade80';
+  errEl.textContent = filled + ' field(s) filled. Review and submit.';
+  document.getElementById('new-account-form').scrollIntoView({behavior:'smooth'});
+});
 
 const PRESETS = {
   'tf-growth-150k': {
