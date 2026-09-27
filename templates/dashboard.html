@@ -77,12 +77,12 @@
 
   <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="account-card">
 
+    {# ── Header: firm logo + phase badge ── #}
     <div class="card-header">
       <div class="card-firm">
         {% if acct.firm.logo_filename %}
         <img src="{{ url_for('static', filename='brand/firms/' + acct.firm.logo_filename) }}"
-             alt="{{ acct.firm.name }}"
-             class="firm-logo"
+             alt="{{ acct.firm.name }}" class="firm-logo"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <span class="firm-logo-fallback" style="display:none;">{{ acct.firm.name[:2]|upper }}</span>
         {% else %}
@@ -93,79 +93,127 @@
       <span class="phase-badge phase-badge--{{ phase_val|lower }}">{{ phase_val }}</span>
     </div>
 
-    <div class="card-nickname">{{ acct.nickname }}</div>
-
-    <div class="card-balance">
-      <span class="balance-value num">${{ "{:,.2f}".format(acct.current_balance|float) }}</span>
-      <span class="balance-change num {% if card.net_performance > 0 %}text-profit{% elif card.net_performance < 0 %}text-loss{% endif %}">
-        {{ "{:+,.0f}".format(card.net_performance) }}
-      </span>
+    {# ── Account name + ID ── #}
+    <div>
+      <div class="card-nickname">{{ acct.nickname }}</div>
+      {% if acct.external_id %}
+      <div class="card-acct-id">{{ acct.external_id }}</div>
+      {% endif %}
     </div>
 
-    {# ── TradingView-style sparkline ── #}
-    {% if card.sparkline|length > 1 %}
-    <div class="card-sparkline">
-      <canvas class="sparkline-canvas" data-values="{{ card.sparkline | tojson }}"
-              width="260" height="52"
-              style="width:100%;height:52px;display:block;"></canvas>
+    {# ── Status tags ── #}
+    <div class="card-tags">
+      <span class="card-tag">{{ acct.drawdown_type.value.replace('_',' ') }}</span>
+      {% if not is_breached and not is_passed %}
+      <span class="card-tag card-tag--green">ACTIVE</span>
+      {% elif is_breached %}
+      <span class="card-tag card-tag--red">BREACHED</span>
+      {% elif is_passed %}
+      <span class="card-tag card-tag--purple">PASSED</span>
+      {% endif %}
+      {% if acct.daily_loss_limit %}
+      <span class="card-tag">DLL ${{ "{:,.0f}".format(acct.daily_loss_limit|float) }}</span>
+      {% endif %}
+      {% if acct.consistency_pct %}
+      <span class="card-tag">{{ (acct.consistency_pct * 100)|int }}% CONSISTENCY</span>
+      {% endif %}
+      {% if acct.floor_is_locked %}
+      <span class="card-tag card-tag--accent">FLOOR LOCKED</span>
+      {% endif %}
+      {% if card.risk_warning %}
+      <span class="card-tag card-tag--red">RISK HIGH</span>
+      {% endif %}
     </div>
-    {% endif %}
 
+    {# ── 2-column data grid ── #}
     {% if not is_breached %}
-    <div class="card-metrics">
-      <div class="metric">
-        <span class="metric-value num {% if card.room < 1000 %}metric-value--danger{% elif card.room < 2000 %}metric-value--warn{% endif %}">
-          ${{ "{:,.0f}".format(card.room) }}
-        </span>
-        <span class="metric-label">Room</span>
-      </div>
+    {% set gained = acct.current_balance|float - acct.starting_balance|float %}
+    <div class="card-data-grid">
 
-      {% if card.losses_survivable is not none %}
-      <div class="metric">
-        <span class="metric-value num {% if card.losses_survivable <= 2 %}metric-value--danger{% elif card.losses_survivable == 3 %}metric-value--warn{% endif %}">
-          {{ card.losses_survivable }}
-        </span>
-        <span class="metric-label">Losses left</span>
+      <div class="card-data-cell">
+        <div class="card-data-label">Account Balance</div>
+        <div class="card-data-value num">
+          ${{ "{:,.0f}".format(acct.current_balance|float) }}
+          <span class="card-data-slash">/</span>
+          <span class="card-data-sub {% if card.room < 1000 %}text-loss{% elif card.room < 2000 %}text-warn{% endif %}">
+            ${{ "{:,.0f}".format(acct.max_loss_limit|float) }}
+          </span>
+        </div>
       </div>
-      {% endif %}
-
-      {% if acct.current_risk %}
-      <div class="metric">
-        <span class="metric-value num {% if card.risk_warning %}metric-value--danger{% endif %}">
-          ${{ "{:,.0f}".format(acct.current_risk|float) }}
-        </span>
-        <span class="metric-label">Risk{% if card.risk_warning %} ⚠{% endif %}</span>
-      </div>
-      {% endif %}
 
       {% if acct.profit_target and phase_val == 'EVAL' %}
-      <div class="metric">
-        {% set gained = acct.current_balance|float - acct.starting_balance|float %}
-        {% set pct = (gained / acct.profit_target|float * 100)|round(0)|int %}
-        <span class="metric-value num">{{ [pct, 0]|max }}%</span>
-        <span class="metric-label">To target</span>
+      <div class="card-data-cell">
+        <div class="card-data-label">Profit Target</div>
+        <div class="card-data-value num {% if gained > 0 %}text-profit{% elif gained < 0 %}text-loss{% endif %}">
+          {{ "{:+,.0f}".format(gained) }}
+          <span class="card-data-slash">/</span>
+          <span class="card-data-sub">${{ "{:,.0f}".format(acct.profit_target|float) }}</span>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card-data-cell">
+        <div class="card-data-label">Room Above Floor</div>
+        <div class="card-data-value num {% if card.room < 1000 %}text-loss{% elif card.room < 2000 %}text-warn{% endif %}">
+          ${{ "{:,.0f}".format(card.room) }}
+        </div>
+      </div>
+
+      {% if acct.current_risk %}
+      <div class="card-data-cell">
+        <div class="card-data-label">Risk Setting{% if card.risk_warning %} ⚠{% endif %}</div>
+        <div class="card-data-value num {% if card.risk_warning %}text-loss{% endif %}">
+          ${{ "{:,.0f}".format(acct.current_risk|float) }}
+          {% if card.losses_survivable is not none %}
+          <span class="card-data-sub">{{ card.losses_survivable }}L cushion</span>
+          {% endif %}
+        </div>
       </div>
       {% endif %}
 
       {% if card.days_to_target and card.days_to_target != 0 %}
-      <div class="metric">
-        <span class="metric-value num">~{{ card.days_to_target.trading }}d</span>
-        <span class="metric-label">Est. days</span>
+      <div class="card-data-cell">
+        <div class="card-data-label">Est. Trading Days</div>
+        <div class="card-data-value num">~{{ card.days_to_target.trading }}d</div>
       </div>
       {% endif %}
+
+      {% if acct.consistency_pct and phase_val == 'EVAL' and acct.best_day_so_far and gained > 0 %}
+      {% set cons_limit = acct.consistency_pct * 100 %}
+      {% set cons_actual = (acct.best_day_so_far|float / gained * 100) %}
+      <div class="card-data-cell">
+        <div class="card-data-label">Consistency</div>
+        <div class="card-data-value num {% if cons_actual > cons_limit %}text-loss{% else %}text-profit{% endif %}">
+          {{ "%.1f"|format(cons_actual) }}%
+          <span class="card-data-sub">limit {{ cons_limit|int }}%</span>
+        </div>
+      </div>
+      {% endif %}
+
     </div>
 
+    {# ── Progress bar: MLL ──── START ──── CURRENT ──► TARGET ── #}
     {% if phase_val == 'EVAL' and acct.profit_target %}
-    {% set gained = acct.current_balance|float - acct.starting_balance|float %}
-    {% set pct_raw = gained / acct.profit_target|float * 100 %}
-    {% set pct_clamped = [[pct_raw, 0]|max, 100]|min %}
-    <div class="progress-bar-wrap">
-      <div class="progress-bar">
-        <div class="progress-bar-fill" style="width: {{ pct_clamped }}%"></div>
+    {% set mll = acct.max_loss_limit|float %}
+    {% set start = acct.starting_balance|float %}
+    {% set target_val = start + acct.profit_target|float %}
+    {% set current = acct.current_balance|float %}
+    {% set total_range = target_val - mll %}
+    {% set fill_pct = [[(current - mll) / total_range * 100, 0]|max, 100]|min %}
+    {% set start_pct = [(start - mll) / total_range * 100, 0]|max %}
+    <div class="card-progress-wrap">
+      <div class="card-progress-bar-bg">
+        <div class="card-progress-bar-fill" style="width:{{ fill_pct }}%"></div>
+        <div class="card-progress-start-marker" style="left:{{ start_pct }}%"></div>
+      </div>
+      <div class="card-progress-labels">
+        <span class="card-progress-label--mll">${{ "{:,.0f}".format(mll) }}<br><em>MLL</em></span>
+        <span class="card-progress-label--target">${{ "{:,.0f}".format(target_val) }}<br><em>TARGET</em></span>
       </div>
     </div>
     {% endif %}
 
+    {# ── Risk ladder chips ── #}
     {% if card.ladder %}
     <div class="card-ladder-preview">
       {% for row in card.ladder[:3] %}
@@ -173,16 +221,6 @@
         {{ row.n }}L: ${{ "{:,.0f}".format(row.max_risk) }}
       </span>
       {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if acct.floor_is_locked %}
-    <div class="floor-locked-badge">Floor locked</div>
-    {% endif %}
-
-    {% if card.risk_warning %}
-    <div class="warn-box" style="padding: 6px 10px; font-size: 12px;">
-      Risk exceeds 3-loss threshold
     </div>
     {% endif %}
 
