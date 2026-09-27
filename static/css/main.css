@@ -159,7 +159,7 @@ h3 { font-size: 1rem; font-weight: 600; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 5px;
+  padding: 24px 18px;
   border-bottom: 1px solid var(--border);
   text-decoration: none;
   flex-shrink: 0;
