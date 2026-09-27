@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Prop Desk{% endblock %}</title>
 
-  <link rel="icon" href="/static/brand/favicon.ico" sizes="any">
-  <link rel="icon" href="/static/brand/logo-mark.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/static/brand/logo-mark-180.png">
+  <link rel="icon" href="{{ url_for('static', filename='brand/logoPD.png') }}" type="image/png">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/logoPD.png') }}">
   <meta name="theme-color" content="#0b0e13" id="theme-color-meta">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,12 +30,7 @@
 
   {# ── Logo ── #}
   <a href="{{ url_for('accounts.dashboard') }}" class="sidebar-logo">
-    <svg viewBox="0 0 63.5 63.5" width="36" height="36" aria-hidden="true" style="flex-shrink:0;">
-      <g transform="translate(-1.25 -0.375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 53 H50" stroke="var(--floor)" stroke-width="6"/>
-        <path d="M10 41 H26 V28 H42 V13 H56" stroke="var(--accent)" stroke-width="9.5"/>
-      </g>
-    </svg>
+    <img src="{{ url_for('static', filename='brand/logoPD.png') }}" alt="" width="36" height="36" style="flex-shrink:0;">
     <span class="sidebar-wordmark">Prop Desk</span>
   </a>
 
