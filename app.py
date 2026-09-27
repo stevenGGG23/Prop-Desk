@@ -1,3 +1,4 @@
+import logging
 import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -8,6 +9,8 @@ from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -62,7 +65,43 @@ def create_app(env=None):
     from cli import register_cli
     register_cli(app)
 
+    _start_scheduler(app)
+
     return app
+
+
+def _start_scheduler(app):
+    """Start the daily-report background scheduler.
+
+    Skipped in testing, and in the Werkzeug reloader parent process
+    (which re-imports the module before forking the actual worker).
+    """
+    if app.config.get("TESTING"):
+        return
+    # When flask run is used with the reloader, WERKZEUG_RUN_MAIN is set
+    # only in the child process.  Avoid starting two schedulers.
+    if app.config.get("DEBUG") and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        from routes.api import send_daily_report_email
+
+        scheduler = BackgroundScheduler(daemon=True)
+        scheduler.add_job(
+            func=send_daily_report_email,
+            args=[app],
+            trigger=CronTrigger(hour=22, minute=0, timezone="UTC"),
+            id="daily_report",
+            replace_existing=True,
+        )
+        scheduler.start()
+        logging.getLogger(__name__).info(
+            "Daily report scheduler started — fires at 22:00 UTC each day."
+        )
+    except Exception as exc:  # pragma: no cover
+        logging.getLogger(__name__).error("Failed to start scheduler: %s", exc)
 
 
 app = create_app()

@@ -9,9 +9,6 @@
   </div>
   <div class="page-header-right">
     {% if cards %}
-    <button class="btn btn--ghost btn--sm" id="send-report-btn" title="Email today's report">
-      Email report
-    </button>
     <div id="portfolio-risk-container" class="num" style="font-size:13px;color:var(--ink-dim);">
       <span class="spinner"></span>
     </div>
@@ -236,23 +233,7 @@ document.querySelectorAll('.sparkline-canvas').forEach(function(canvas) {
   }
 })();
 
-// Email report button
-document.getElementById('send-report-btn').addEventListener('click', async function() {
-  this.disabled = true;
-  this.textContent = 'Sending…';
-  try {
-    const res = await fetch('/api/send-daily-report', { method: 'POST' });
-    const data = await res.json();
-    if (data.ok) {
-      this.textContent = 'Sent ✓';
-    } else {
-      this.textContent = 'Failed';
-      alert(data.error || 'Send failed');
-    }
-  } catch(e) {
-    this.textContent = 'Error';
-  }
-});
+
 {% endif %}
 </script>
 {% endblock %}
