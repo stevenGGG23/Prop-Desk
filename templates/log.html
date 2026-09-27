@@ -28,9 +28,11 @@
 {% if entries.items %}
 <div class="log-list">
   {% for entry in entries.items %}
-  <div class="log-entry log-entry--{{ entry.kind.value.lower() }}">
+  {% set is_webhook = entry.message.startswith('Webhook') %}
+  {% set display_kind = 'webhook' if is_webhook else entry.kind.value.lower() %}
+  <div class="log-entry log-entry--{{ display_kind }}">
     <div class="log-entry-meta">
-      <span class="log-kind log-kind--{{ entry.kind.value.lower() }}">{{ entry.kind.value }}</span>
+      <span class="log-kind log-kind--{{ display_kind }}">{{ 'WEBHOOK' if is_webhook else entry.kind.value }}</span>
       <span class="log-time num">{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
       {% if entry.account %}
       <a href="{{ url_for('accounts.account_detail', account_id=entry.account_id) }}" class="log-account">{{ entry.account.nickname }}</a>

@@ -675,13 +675,20 @@ def receive_webhook(token):
 @bp.route("/send-daily-report", methods=["POST"])
 @login_required
 def send_daily_report():
-    """Build and send a daily summary email to REPORT_EMAIL."""
-    from flask import current_app
-    from app import mail
+    """Build and send a daily summary email to stevengobran@gmail.com.
 
-    report_email = current_app.config.get("REPORT_EMAIL", "")
-    if not report_email:
-        return jsonify({"error": "REPORT_EMAIL not configured on server."}), 422
+    Requires GMAIL_APP_PASSWORD set on Render.
+    Generate one at: Google Account → Security → 2-Step Verification → App passwords
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+    from flask import current_app
+
+    gmail_password = current_app.config.get("GMAIL_APP_PASSWORD", "")
+    if not gmail_password:
+        return jsonify({"error": "GMAIL_APP_PASSWORD not set. Add it to Render environment variables."}), 422
+
+    gmail_address = "stevengobran@gmail.com"
 
     accounts = (Account.query
                 .filter_by(user_id=current_user.id)
@@ -691,15 +698,18 @@ def send_daily_report():
     from engine.risk import room as calc_room, losses_survivable, check_risk_warning
     from routes.accounts import _consistency_flags, _days_to_target
 
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lines = [
-        "Prop Desk Daily Report — {}".format(datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        "PROP DESK DAILY REPORT — {}".format(today),
         "=" * 60,
         "",
     ]
 
+    active_count = 0
     for acct in accounts:
         if acct.phase in (Phase.BREACHED, Phase.PASSED):
             continue
+        active_count += 1
         bal = float(acct.current_balance)
         start = float(acct.starting_balance)
         mll = float(acct.max_loss_limit)
@@ -711,41 +721,53 @@ def send_daily_report():
         cons = _consistency_flags(acct)
         days = _days_to_target(acct)
 
-        lines.append("{} — {}  [{}]".format(acct.nickname, acct.firm.name, acct.phase.value))
-        lines.append("  Balance:  ${:>12,.2f}   Profit: ${:>+,.2f}".format(bal, profit))
-        lines.append("  Floor:    ${:>12,.2f}   Room:   ${:>,.0f}{}".format(
-            mll, r, "  ⚠ LOCKED" if acct.floor_is_locked else ""))
+        lines.append("▸ {} — {}  [{}]".format(acct.nickname, acct.firm.name, acct.phase.value))
+        lines.append("  Balance : ${:,.2f}   Profit: ${:+,.2f}".format(bal, profit))
+        lines.append("  Floor   : ${:,.2f}   Room:   ${:,.0f}{}".format(
+            mll, r, "  *** LOCKED ***" if acct.floor_is_locked else ""))
         if risk:
-            lines.append("  Risk:     ${:>12,.0f}   Losses left: {}{}".format(
-                risk, survivable or "—", "  ⚠ WARNING" if warn else ""))
+            lines.append("  Risk    : ${:,.0f}   Losses left: {}{}".format(
+                risk, survivable or "—", "  *** WARNING ***" if warn else ""))
         if acct.profit_target:
-            pct_done = min(profit / float(acct.profit_target) * 100, 100)
-            lines.append("  Target:   ${:>12,.0f}   Progress: {:.0f}%".format(
-                float(acct.profit_target), max(pct_done, 0)))
-        if days:
-            lines.append("  Est. days to target: ~{} trading / ~{} calendar".format(
-                days["trading"], days["calendar"]))
-        if cons and not cons["passing"]:
-            lines.append("  ⚠ CONSISTENCY: {:.1f}% ratio vs {:.0f}% limit — need ${:,.0f} more profit".format(
-                cons["current_ratio"] or 0, cons["pct_label"], cons["extra_needed"] or 0))
-        elif cons and cons["passing"] and cons.get("max_next_win"):
-            lines.append("  Consistency OK — max next winning day: ${:,.0f}".format(
-                cons["max_next_win"]))
+            pct_done = max(0, min(profit / float(acct.profit_target) * 100, 100))
+            lines.append("  Target  : ${:,.0f}   Progress: {:.0f}%".format(
+                float(acct.profit_target), pct_done))
+        if days and days != 0:
+            lines.append("  Est. days to target: ~{} trading (~{} calendar)  (${:,.0f} remaining)".format(
+                days["trading"], days["calendar"], days["remaining"]))
+        if cons:
+            if not cons["passing"]:
+                lines.append("  !! CONSISTENCY FAILING: {:.1f}% ratio vs {:.0f}% limit".format(
+                    cons["current_ratio"] or 0, cons["pct_label"]))
+                lines.append("     Need ${:,.0f} more profit before you can pass.".format(
+                    cons["extra_needed"] or 0))
+            elif cons.get("max_next_win"):
+                lines.append("  Consistency OK — stay under ${:,.0f} on any single day.".format(
+                    cons["max_next_win"]))
         lines.append("")
 
-    lines.append("—")
-    lines.append("Sent by Prop Desk  •  {}".format(
+    if active_count == 0:
+        lines.append("No active accounts.")
+        lines.append("")
+
+    lines.append("-" * 60)
+    lines.append("Sent by Prop Desk  |  {}".format(
         datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")))
 
     body = "\n".join(lines)
     subject = "Prop Desk Report — {}".format(
         datetime.now(timezone.utc).strftime("%b %d, %Y"))
 
-    try:
-        from flask_mail import Message
-        msg = Message(subject=subject, recipients=[report_email], body=body)
-        mail.send(msg)
-    except Exception as exc:
-        return jsonify({"error": "Mail send failed: {}".format(str(exc))}), 500
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = gmail_address
+    msg["To"] = gmail_address
 
-    return jsonify({"ok": True, "sent_to": report_email})
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_address, gmail_password)
+            server.send_message(msg)
+    except Exception as exc:
+        return jsonify({"error": "Gmail send failed: {}".format(str(exc))}), 500
+
+    return jsonify({"ok": True, "sent_to": gmail_address})

@@ -1677,6 +1677,7 @@ select.input {
 .log-entry--payout        { border-left-color: #a855f7; }
 .log-entry--setting_change{ border-left-color: #eab308; }
 .log-entry--note          { border-left-color: var(--border); }
+.log-entry--webhook       { border-left-color: #f97316; }
 
 .log-entry-meta {
   display: flex;
@@ -1701,6 +1702,7 @@ select.input {
 .log-kind--payout         { background: rgba(168,85,247,0.12); color: #c084fc; }
 .log-kind--setting_change { background: rgba(234,179,8,0.12);  color: #fbbf24; }
 .log-kind--note           { background: rgba(100,116,139,0.12);color: var(--floor); }
+.log-kind--webhook        { background: rgba(249,115,22,0.15); color: #fb923c; }
 
 .log-time {
   font-size: 12px;
