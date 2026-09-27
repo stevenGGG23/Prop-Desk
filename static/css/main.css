@@ -159,7 +159,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 }
 
 .sidebar-wordmark {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--ink);
   letter-spacing: -0.02em;
@@ -354,15 +354,15 @@ h3 { font-size: 1rem; font-weight: 600; }
 }
 
 .greeting-title {
-  font-size: 1.6rem;
+  font-size: 2.2rem;
   font-weight: 700;
   color: var(--ink);
-  letter-spacing: -0.02em;
-  margin-bottom: 3px;
+  letter-spacing: -0.03em;
+  margin-bottom: 6px;
 }
 
 .greeting-sub {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--ink-dim);
 }
 
