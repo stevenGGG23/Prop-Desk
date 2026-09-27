@@ -40,6 +40,7 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite://"
     RATELIMIT_ENABLED = False
+    WTF_CSRF_ENABLED = False
 
 
 config_map = {

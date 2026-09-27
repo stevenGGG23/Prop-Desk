@@ -1,4 +1,5 @@
 import io
+import re
 import unittest
 from datetime import date
 
@@ -49,6 +50,51 @@ class AccountRouteTests(unittest.TestCase):
             db.session.remove()
             db.drop_all()
             db.engine.dispose()
+
+    def test_settings_rejects_email_already_in_use(self):
+        self.app.config["WTF_CSRF_ENABLED"] = True
+        with self.app.app_context():
+            other_user = User(
+                username="other",
+                display_name="Other User",
+                password_hash="x",
+                email="taken@example.com",
+            )
+            db.session.add(other_user)
+            db.session.commit()
+
+        page = self.client.get("/settings")
+        csrf_token = re.search(
+            r'<meta name="csrf-token" content="([^"]+)"',
+            page.get_data(as_text=True),
+        ).group(1)
+        form_data = {
+            "csrf_token": csrf_token,
+            "action": "profile",
+            "display_name": "Test User",
+            "username": "tester",
+            "email": "taken@example.com",
+            "timezone": "America/New_York",
+        }
+        rejected = self.client.post(
+            "/settings",
+            data={key: value for key, value in form_data.items() if key != "csrf_token"},
+        )
+        self.assertEqual(rejected.status_code, 400)
+
+        response = self.client.post("/settings", data=form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("already in use", response.get_data(as_text=True))
+
+    def test_login_form_includes_csrf_token(self):
+        with self.client.session_transaction() as session:
+            session.pop("_user_id", None)
+            session.pop("_fresh", None)
+        response = self.client.get("/login")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'name="csrf_token"', response.data)
 
     def test_daily_result_can_be_corrected_without_double_counting(self):
         url = "/accounts/{}/daily-result".format(self.account_id)

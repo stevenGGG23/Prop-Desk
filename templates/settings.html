@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Account Settings — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Account Settings</h1>
+  <p class="page-sub">Manage your profile, credentials, and preferences.</p>
+</div>
+
+<div style="max-width:620px; display:flex; flex-direction:column; gap:24px;">
+
+  {# ── Profile ── #}
+  <div class="panel">
+    <h2 class="panel-title" style="margin-bottom:20px;">Profile</h2>
+    <form method="POST">
+      <input type="hidden" name="action" value="profile">
+      <div class="field-row">
+        <div class="field">
+          <label class="label" for="display_name">Display name</label>
+          <input class="input" type="text" id="display_name" name="display_name"
+                 value="{{ current_user.display_name }}" required maxlength="128">
+        </div>
+        <div class="field">
+          <label class="label" for="username">Username</label>
+          <input class="input" type="text" id="username" name="username"
+                 value="{{ current_user.username }}" required maxlength="64"
+                 autocomplete="off" pattern="[a-zA-Z0-9_\-]+"
+                 title="Letters, numbers, underscores and hyphens only">
+          <span class="field-hint">Used to sign in. Letters, numbers, _ and - only.</span>
+        </div>
+        <div class="field">
+          <label class="label" for="email">Email <span class="label-optional">(optional)</span></label>
+          <input class="input" type="email" id="email" name="email"
+                 value="{{ current_user.email or '' }}" maxlength="256"
+                 placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label class="label" for="timezone">Timezone</label>
+          <select class="input" id="timezone" name="timezone">
+            {% set tz_options = [
+              ("America/New_York",    "Eastern (ET)"),
+              ("America/Chicago",     "Central (CT)"),
+              ("America/Denver",      "Mountain (MT)"),
+              ("America/Los_Angeles", "Pacific (PT)"),
+              ("America/Phoenix",     "Arizona (no DST)"),
+              ("UTC",                 "UTC"),
+              ("Europe/London",       "London (GMT/BST)"),
+              ("Europe/Berlin",       "Central Europe (CET)"),
+              ("Asia/Tokyo",          "Tokyo (JST)"),
+              ("Australia/Sydney",    "Sydney (AEDT)"),
+            ] %}
+            {% for tz_val, tz_label in tz_options %}
+              <option value="{{ tz_val }}" {% if (current_user.timezone or 'America/New_York') == tz_val %}selected{% endif %}>{{ tz_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field field--wide">
+          <label class="label" for="bio">Bio <span class="label-optional">(optional)</span></label>
+          <textarea class="input" id="bio" name="bio" rows="3"
+                    placeholder="A short note about yourself or your trading setup."
+                    style="resize:vertical;">{{ current_user.bio or '' }}</textarea>
+        </div>
+      </div>
+      <div style="margin-top:20px;">
+        <button type="submit" class="btn btn--primary">Save profile</button>
+      </div>
+    </form>
+  </div>
+
+  {# ── Change Password ── #}
+  <div class="panel">
+    <h2 class="panel-title" style="margin-bottom:20px;">Change Password</h2>
+    <form method="POST">
+      <input type="hidden" name="action" value="password">
+      <div class="field-row">
+        <div class="field field--wide">
+          <label class="label" for="current_password">Current password</label>
+          <input class="input" type="password" id="current_password" name="current_password"
+                 autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <label class="label" for="new_password">New password</label>
+          <input class="input" type="password" id="new_password" name="new_password"
+                 autocomplete="new-password" minlength="8" required>
+          <span class="field-hint">At least 8 characters.</span>
+        </div>
+        <div class="field">
+          <label class="label" for="confirm_password">Confirm new password</label>
+          <input class="input" type="password" id="confirm_password" name="confirm_password"
+                 autocomplete="new-password" required>
+        </div>
+      </div>
+      <div style="margin-top:20px;">
+        <button type="submit" class="btn btn--primary">Update password</button>
+      </div>
+    </form>
+  </div>
+
+  {# ── Danger Zone ── #}
+  <div class="panel" style="border-color: var(--red-dim);">
+    <h2 class="panel-title" style="margin-bottom:4px; color:var(--red);">Sign out</h2>
+    <p style="font-size:0.85rem; color:var(--ink-dim); margin:0 0 16px;">
+      You'll be redirected to the login page.
+    </p>
+    <a href="{{ url_for('auth.logout') }}" class="btn btn--danger">Sign out</a>
+  </div>
+
+</div>
+{% endblock %}

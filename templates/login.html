@@ -1,56 +1,236 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in — Prop Desk</title>
   <link rel="icon" href="/static/brand/favicon.ico" sizes="any">
   <link rel="icon" href="/static/brand/logo-mark.svg" type="image/svg+xml">
-  <meta name="theme-color" content="#0b0e13">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="theme-color" content="#070c14">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-</head>
-<body class="login-body">
+  <style>
+    html, body { height: 100%; margin: 0; }
+    .auth-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #070c14;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(6,182,212,0.18) 0%, transparent 60%);
+      padding: 24px;
+      font-family: var(--font);
+      color: var(--ink);
+    }
 
-<div class="login-wrap">
-  <div class="login-card">
-    <div class="login-logo">
-      <svg viewBox="0 0 63.5 63.5" width="48" height="48" aria-label="Prop Desk">
-        <g transform="translate(-1.25 -0.375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 53 H50" stroke="#64748b" stroke-width="6"/>
-          <path d="M10 41 H26 V28 H42 V13 H56" stroke="#06b6d4" stroke-width="9.5"/>
-        </g>
-      </svg>
-      <span class="login-wordmark">Prop Desk</span>
+    .auth-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .auth-logo-wordmark {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 400px;
+      background: #0f1520;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 36px 32px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .auth-heading {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0 0 2px;
+      letter-spacing: -0.02em;
+    }
+    .auth-sub {
+      font-size: 0.875rem;
+      color: #6b7d96;
+      margin: 0;
+    }
+
+    .auth-flashes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .auth-flash {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 500;
+    }
+    .auth-flash--error   { background: rgba(239,68,68,0.12);  color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+    .auth-flash--success { background: rgba(34,197,94,0.10);  color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+    .auth-flash--info    { background: rgba(6,182,212,0.10);  color: #22d3ee; border: 1px solid rgba(6,182,212,0.2); }
+    .auth-flash--warning { background: rgba(245,158,11,0.10); color: #fbbf24; border: 1px solid rgba(245,158,11,0.2); }
+
+    .auth-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .auth-field-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #c8d6e8;
+      margin-bottom: 6px;
+    }
+
+    .auth-input-wrap {
+      position: relative;
+    }
+
+    .auth-input {
+      width: 100%;
+      box-sizing: border-box;
+      background: #0b1220;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-size: 0.9rem;
+      font-family: var(--font);
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 150ms;
+    }
+    .auth-input::placeholder { color: #3d4f66; }
+    .auth-input:focus { border-color: rgba(6,182,212,0.5); box-shadow: 0 0 0 3px rgba(6,182,212,0.08); }
+    .auth-input--pw { padding-right: 44px; }
+
+    .auth-pw-toggle {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      color: #4a6080;
+      display: flex;
+      align-items: center;
+    }
+    .auth-pw-toggle:hover { color: #8898aa; }
+
+    .auth-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: opacity 150ms, transform 80ms;
+    }
+    .auth-btn:active { transform: scale(0.99); }
+    .auth-btn--primary {
+      background: #fff;
+      color: #0b0e13;
+    }
+    .auth-btn--primary:hover { opacity: 0.93; }
+
+    .auth-footer {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #3d4f66;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+<div class="auth-page">
+
+  <div class="auth-logo">
+    <svg viewBox="0 0 63.5 63.5" width="36" height="36" aria-hidden="true">
+      <g transform="translate(-1.25 -0.375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 53 H50" stroke="#64748b" stroke-width="6"/>
+        <path d="M10 41 H26 V28 H42 V13 H56" stroke="#06b6d4" stroke-width="9.5"/>
+      </g>
+    </svg>
+    <span class="auth-logo-wordmark">Prop Desk</span>
+  </div>
+
+  <div class="auth-card">
+    <div>
+      <h1 class="auth-heading">Log in to your account</h1>
+      <p class="auth-sub">Enter your credentials to access the dashboard.</p>
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, message in messages %}
-        <div class="flash flash--{{ category }}">{{ message }}</div>
-      {% endfor %}
+      {% if messages %}
+      <div class="auth-flashes">
+        {% for category, message in messages %}
+          <div class="auth-flash auth-flash--{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
     {% endwith %}
 
-    {% if error %}
-    <div class="flash flash--error">{{ error }}</div>
-    {% endif %}
+    <form method="POST" class="auth-fields">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <form method="POST" class="login-form">
-      <div class="field">
-        <label class="label" for="username">Username</label>
-        <input class="input" type="text" id="username" name="username"
-               autocomplete="username" autofocus required>
+      <div>
+        <div class="auth-field-label">Username</div>
+        <div class="auth-input-wrap">
+          <input class="auth-input" type="text" id="username" name="username"
+                 placeholder="Enter your username"
+                 autocomplete="username" autofocus required>
+        </div>
       </div>
-      <div class="field">
-        <label class="label" for="password">Password</label>
-        <input class="input" type="password" id="password" name="password"
-               autocomplete="current-password" required>
+
+      <div>
+        <div class="auth-field-label">
+          <span>Password</span>
+        </div>
+        <div class="auth-input-wrap">
+          <input class="auth-input auth-input--pw" type="password" id="password" name="password"
+                 placeholder="Enter your password"
+                 autocomplete="current-password" required>
+          <button type="button" class="auth-pw-toggle" onclick="togglePw()" aria-label="Show/hide password">
+            <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
-      <button type="submit" class="btn btn--primary btn--full">Sign in</button>
+
+      <button type="submit" class="auth-btn auth-btn--primary" style="margin-top:4px;">Sign in</button>
     </form>
   </div>
+
+  <div class="auth-footer">© 2026 Prop Desk</div>
 </div>
 
+<script>
+function togglePw() {
+  var inp = document.getElementById('password');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+</script>
 </body>
 </html>

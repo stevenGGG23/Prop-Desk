@@ -61,6 +61,9 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     must_change_password = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    email = db.Column(db.String(256), unique=True, nullable=True, index=True)
+    timezone = db.Column(db.String(64), nullable=False, default="America/New_York")
+    bio = db.Column(db.Text, nullable=True)
     # Master inbound webhook token — one per user, routes trades by account name
     inbound_token = db.Column(db.String(64), unique=True, nullable=True)
 
