@@ -1315,7 +1315,8 @@ select.input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 24px 28px;
+  margin-bottom: 48px;
 }
 
 .advisor-card-header {
