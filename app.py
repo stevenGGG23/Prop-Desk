@@ -92,13 +92,17 @@ def _start_scheduler(app):
         scheduler.add_job(
             func=send_daily_report_email,
             args=[app],
-            trigger=CronTrigger(hour=22, minute=0, timezone="UTC"),
+            trigger=CronTrigger(
+                hour=6, minute=0,
+                day_of_week="mon-fri",
+                timezone="America/New_York",
+            ),
             id="daily_report",
             replace_existing=True,
         )
         scheduler.start()
         logging.getLogger(__name__).info(
-            "Daily report scheduler started — fires at 22:00 UTC each day."
+            "Daily report scheduler started — fires at 06:00 ET Mon-Fri."
         )
     except Exception as exc:  # pragma: no cover
         logging.getLogger(__name__).error("Failed to start scheduler: %s", exc)
