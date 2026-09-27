@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,13 +8,20 @@
   <link rel="icon" href="/static/brand/favicon.ico" sizes="any">
   <link rel="icon" href="/static/brand/logo-mark.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/brand/logo-mark-180.png">
-  <meta name="theme-color" content="#0b0e13">
+  <meta name="theme-color" content="#0b0e13" id="theme-color-meta">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;1,14..32,400&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  <script>
+    // Apply saved theme before first paint to prevent flash
+    (function() {
+      var t = localStorage.getItem('pd-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -23,14 +30,15 @@
 <nav class="nav">
   <div class="nav-left">
     <a href="{{ url_for('accounts.dashboard') }}" class="nav-brand" aria-label="Prop Desk home">
-      <svg viewBox="0 0 63.5 63.5" width="28" height="28" aria-hidden="true">
+      <svg viewBox="0 0 63.5 63.5" width="26" height="26" aria-hidden="true">
         <g transform="translate(-1.25 -0.375)" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 53 H50" stroke="#64748b" stroke-width="6"/>
-          <path d="M10 41 H26 V28 H42 V13 H56" stroke="#06b6d4" stroke-width="9.5"/>
+          <path d="M10 53 H50" stroke="var(--floor)" stroke-width="6"/>
+          <path d="M10 41 H26 V28 H42 V13 H56" stroke="var(--accent)" stroke-width="9.5"/>
         </g>
       </svg>
       <span class="nav-wordmark">Prop Desk</span>
     </a>
+    <div class="nav-sep" aria-hidden="true"></div>
     <div class="nav-links">
       <a href="{{ url_for('accounts.dashboard') }}"
          class="nav-link {% if request.endpoint == 'accounts.dashboard' %}is-active{% endif %}">
@@ -64,7 +72,15 @@
   </div>
   <div class="nav-right">
     <span class="nav-user">{{ current_user.display_name }}</span>
-    <a href="{{ url_for('auth.logout') }}" class="nav-link">Sign out</a>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme" title="Toggle light / dark">
+      <svg class="icon-sun" viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
+        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 20 20" fill="currentColor" width="15" height="15" aria-hidden="true">
+        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+      </svg>
+    </button>
+    <a href="{{ url_for('auth.logout') }}" class="nav-link nav-link--muted">Sign out</a>
   </div>
 </nav>
 {% endif %}
@@ -83,6 +99,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+(function() {
+  var btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    var html = document.documentElement;
+    var cur = html.getAttribute('data-theme');
+    var next = cur === 'light' ? 'dark' : 'light';
+    // Brief transition class so only explicit switches animate
+    html.setAttribute('data-theme-transitioning', '');
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('pd-theme', next);
+    var m = document.getElementById('theme-color-meta');
+    if (m) m.setAttribute('content', next === 'light' ? '#f8fafc' : '#0b0e13');
+    setTimeout(function() { html.removeAttribute('data-theme-transitioning'); }, 200);
+  });
+})();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
