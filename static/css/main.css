@@ -1913,7 +1913,7 @@ select.input {
 }
 .card-menu {
   position: absolute;
-  top: 12px;
+  bottom: 12px;
   right: 12px;
   z-index: 10;
 }
@@ -1940,7 +1940,7 @@ select.input {
 .card-menu-dropdown {
   display: none;
   position: absolute;
-  top: calc(100% + 4px);
+  bottom: calc(100% + 4px);
   right: 0;
   min-width: 150px;
   background: var(--surface);
