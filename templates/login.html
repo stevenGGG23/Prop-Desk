@@ -31,7 +31,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: var(--bg);
+      background: transparent;
       padding: 24px;
       font-family: var(--font);
       color: var(--ink);
@@ -43,10 +43,9 @@
       gap: 10px;
       margin-bottom: 28px;
     }
-    .auth-logo-wordmark {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: var(--ink);
+    .auth-logo img {
+      width: 88px;
+      height: 88px;
     }
 
     .auth-card {
@@ -171,9 +170,8 @@
 <div class="auth-page">
 
   <div class="auth-logo">
-    <img class="brand-logo-image--light" src="{{ url_for('static', filename='brand/logoPD-light.png') }}" alt="" width="44" height="44">
-    <img class="brand-logo-image--dark" src="{{ url_for('static', filename='brand/logoPD-dark.png') }}" alt="" width="44" height="44">
-    <span class="auth-logo-wordmark">Prop Desk</span>
+    <img class="brand-logo-image--light" src="{{ url_for('static', filename='brand/logoPD-light.png') }}" alt="Prop Desk logo">
+    <img class="brand-logo-image--dark" src="{{ url_for('static', filename='brand/logoPD-dark.png') }}" alt="Prop Desk logo">
   </div>
 
   <div class="auth-card">
