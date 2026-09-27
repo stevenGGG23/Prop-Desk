@@ -13,7 +13,8 @@
       <span class="spinner"></span>
     </div>
     {% endif %}
-    <a href="{{ url_for('accounts.new_account') }}" class="btn btn--primary">+ Add account</a>
+    <button class="btn btn--ghost btn--sm" id="toggle-webhook-panel">Webhook setup</button>
+    <a href="{{ url_for('accounts.new_account') }}" class="btn btn--primary">+ Connect account</a>
   </div>
 </div>
 
@@ -31,6 +32,38 @@
 </div>
 
 {% else %}
+
+{# ── Master inbound webhook panel ── #}
+<div id="webhook-panel" class="panel" style="display:none;margin-bottom:1.5rem;">
+  <h2 class="panel-title" style="margin-bottom:.75rem;">TradingView / TradersPost connection</h2>
+  <p class="text-dim" style="font-size:13px;margin-bottom:1rem;">
+    Use <strong>one URL</strong> for all your accounts. Include <code style="background:var(--border);padding:1px 5px;border-radius:3px;">"account": "nickname"</code> in the JSON payload to route each trade to the right account.
+  </p>
+
+  <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1.25rem;">
+    <input id="inbound-url" class="input" readonly
+           value="{{ request.host_url.rstrip('/') }}/api/inbound/{{ inbound_token }}"
+           style="font-family:monospace;font-size:12px;flex:1;">
+    <button class="btn btn--ghost btn--sm" onclick="copyInboundUrl()">Copy URL</button>
+  </div>
+
+  <p style="font-size:12px;color:var(--ink-dim);margin-bottom:.5rem;">Paste this JSON in your <strong>TradingView alert message</strong> (change the account name to match yours):</p>
+  <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;line-height:1.6;overflow-x:auto;margin-bottom:1rem;">{
+  "account": "{{ cards[0].account.nickname if cards else 'Growth 150k' }}",
+  "ticker": "&#123;&#123;ticker&#125;&#125;",
+  "action": "&#123;&#123;strategy.order.action&#125;&#125;",
+  "sentiment": "&#123;&#123;strategy.market_position&#125;&#125;",
+  "price": &#123;&#123;close&#125;&#125;,
+  "pnl": &#123;&#123;strategy.netprofit&#125;&#125;
+}</pre>
+
+  <p style="font-size:12px;color:var(--ink-dim);">
+    Fields: <code style="background:var(--border);padding:1px 4px;border-radius:3px;">account</code> (required) ·
+    <code style="background:var(--border);padding:1px 4px;border-radius:3px;">action</code> buy/sell ·
+    <code style="background:var(--border);padding:1px 4px;border-radius:3px;">pnl</code> updates balance ·
+    <code style="background:var(--border);padding:1px 4px;border-radius:3px;">balance</code> overrides balance directly
+  </p>
+</div>
 
 <div class="account-grid">
   {% for card in cards %}
@@ -235,5 +268,22 @@ document.querySelectorAll('.sparkline-canvas').forEach(function(canvas) {
 
 
 {% endif %}
+
+// Webhook panel toggle
+document.getElementById('toggle-webhook-panel').addEventListener('click', function() {
+  const panel = document.getElementById('webhook-panel');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : 'block';
+  this.textContent = visible ? 'Webhook setup' : 'Hide setup';
+});
+
+function copyInboundUrl() {
+  const inp = document.getElementById('inbound-url');
+  navigator.clipboard.writeText(inp.value).then(() => {
+    const btn = inp.nextElementSibling;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy URL', 1500);
+  });
+}
 </script>
 {% endblock %}

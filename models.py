@@ -61,9 +61,16 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     must_change_password = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    # Master inbound webhook token — one per user, routes trades by account name
+    inbound_token = db.Column(db.String(64), unique=True, nullable=True)
 
     accounts = db.relationship("Account", back_populates="user", lazy="dynamic")
     activity_logs = db.relationship("ActivityLog", back_populates="user", lazy="dynamic")
+
+    def get_or_create_inbound_token(self):
+        if not self.inbound_token:
+            self.inbound_token = secrets.token_hex(32)
+        return self.inbound_token
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

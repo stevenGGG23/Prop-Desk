@@ -669,6 +669,161 @@ def receive_webhook(token):
 
 
 # ---------------------------------------------------------------------------
+# Master inbound webhook — one URL for all accounts, route by account name
+# ---------------------------------------------------------------------------
+
+@bp.route("/inbound/<token>", methods=["POST"])
+def inbound_webhook(token):
+    """One webhook URL per user.  Route trades to the right account using
+    the "account" field in the payload (matched against Account.nickname or
+    Account.external_id, case-insensitive).
+
+    Minimum payload:
+        {"account": "Growth 150k", "action": "buy", "ticker": "MNQ"}
+
+    With P&L (updates balance + logs trade):
+        {"account": "Growth 150k", "action": "buy", "ticker": "MNQ",
+         "price": 21500.25, "quantity": 5, "pnl": 900.00}
+
+    TradingView strategy alert JSON to paste in TV:
+        {
+          "account": "Growth 150k",
+          "ticker": "{{ticker}}",
+          "action": "{{strategy.order.action}}",
+          "sentiment": "{{strategy.market_position}}",
+          "price": {{close}},
+          "pnl": {{strategy.netprofit}}
+        }
+    """
+    from models import User
+    user = User.query.filter_by(inbound_token=token).first()
+    if not user:
+        return jsonify({"error": "invalid token"}), 404
+
+    data = request.get_json(silent=True) or {}
+
+    # ── Resolve account ──────────────────────────────────────────────────────
+    account_name = (data.get("account") or data.get("account_id") or "").strip()
+    if not account_name:
+        return jsonify({"error": "payload must include 'account' field with the account nickname"}), 422
+
+    acct = (Account.query
+            .filter_by(user_id=user.id)
+            .filter(
+                db.or_(
+                    db.func.lower(Account.nickname) == account_name.lower(),
+                    Account.external_id == account_name,
+                )
+            )
+            .first())
+    if not acct:
+        return jsonify({"error": "no account matched '{}'. Check the nickname in Prop Desk.".format(account_name)}), 404
+
+    # ── Parse payload ────────────────────────────────────────────────────────
+    # Direction: TradersPost uses action = buy/sell; sentiment = long/short/flat
+    action_raw = (data.get("action") or "").lower()
+    sentiment_raw = (data.get("sentiment") or "").lower()
+    if action_raw in ("buy", "buy_long", "long") or sentiment_raw in ("long",):
+        direction = "LONG"
+    elif action_raw in ("sell", "sell_short", "short", "exit_long") or sentiment_raw in ("short",):
+        direction = "SHORT"
+    else:
+        direction = None
+
+    ticker = data.get("ticker", "")
+
+    fill_price = None
+    for key in ("price", "fill_price", "close"):
+        if key in data:
+            try:
+                fill_price = float(data[key])
+                break
+            except (TypeError, ValueError):
+                pass
+
+    quantity = None
+    for key in ("quantity", "contracts", "qty", "size"):
+        if key in data:
+            try:
+                quantity = int(float(data[key]))
+                break
+            except (TypeError, ValueError):
+                pass
+
+    pnl = None
+    for key in ("pnl", "profit", "net_pnl", "net_profit", "realizedPnl", "realized_pnl"):
+        if key in data:
+            try:
+                pnl = float(data[key])
+                break
+            except (TypeError, ValueError):
+                pass
+
+    # Optional: caller can send current balance directly to sync the account
+    new_balance = None
+    for key in ("balance", "account_balance", "current_balance"):
+        if key in data:
+            try:
+                new_balance = float(data[key])
+                break
+            except (TypeError, ValueError):
+                pass
+
+    has_pnl = pnl is not None and math.isfinite(pnl)
+
+    # ── Log + update ─────────────────────────────────────────────────────────
+    if has_pnl:
+        msg = "Inbound webhook: {} {} {}  pnl={:+.2f}".format(
+            direction or action_raw.upper(), ticker, acct.nickname, pnl)
+    else:
+        msg = "Inbound webhook: {} {} {}  (signal only — no P&L)".format(
+            direction or action_raw.upper(), ticker, acct.nickname)
+
+    entry = ActivityLog(
+        user_id=user.id,
+        account_id=acct.id,
+        kind=ActivityKind.NOTE,
+        message=msg,
+        payload_json=json.dumps({"raw": data}),
+    )
+    db.session.add(entry)
+
+    if has_pnl and acct.phase not in (Phase.BREACHED, Phase.PASSED):
+        trade = Trade(
+            account_id=acct.id,
+            opened_at=datetime.now(timezone.utc),
+            pnl=pnl,
+            direction=direction,
+            quantity=quantity,
+            fill_price=fill_price,
+            signal_name="inbound:{}".format(ticker or "unknown"),
+        )
+        db.session.add(trade)
+        if new_balance is not None:
+            acct.current_balance = new_balance
+        else:
+            acct.current_balance = float(acct.current_balance) + pnl
+
+    elif new_balance is not None and acct.phase not in (Phase.BREACHED, Phase.PASSED):
+        # Balance sync without explicit P&L
+        acct.current_balance = new_balance
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "db error"}), 500
+
+    return jsonify({
+        "ok": True,
+        "account": acct.nickname,
+        "direction": direction,
+        "pnl_recorded": pnl,
+        "balance": float(acct.current_balance),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Daily email report  (called by scheduler — no request context needed)
 # ---------------------------------------------------------------------------
 

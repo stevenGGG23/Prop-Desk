@@ -284,7 +284,10 @@ def dashboard():
         })
 
     firms = Firm.query.order_by(Firm.name).all()
-    return render_template("dashboard.html", cards=cards, firms=firms)
+    inbound_token = current_user.get_or_create_inbound_token()
+    db.session.commit()
+    return render_template("dashboard.html", cards=cards, firms=firms,
+                           inbound_token=inbound_token)
 
 
 # ---------------------------------------------------------------------------
