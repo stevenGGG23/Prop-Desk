@@ -1241,8 +1241,8 @@ select.input {
 .metrics-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 32px;
 }
 
 .metric-card {
@@ -1653,8 +1653,9 @@ select.input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 24px;
   box-shadow: var(--shadow-sm);
+  margin-bottom: 32px;
 }
 
 .panel-header {
