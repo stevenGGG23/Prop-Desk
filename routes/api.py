@@ -814,6 +814,14 @@ def inbound_webhook(token):
         db.session.rollback()
         return jsonify({"error": "db error"}), 500
 
+    # Forward to TradersPost (or any configured webhook URL) after recording
+    if acct.forward_url:
+        try:
+            import requests as _req
+            _req.post(acct.forward_url, json=data, timeout=5)
+        except Exception:
+            pass
+
     return jsonify({
         "ok": True,
         "account": acct.nickname,

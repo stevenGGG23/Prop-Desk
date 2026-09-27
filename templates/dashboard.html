@@ -2,9 +2,13 @@
 {% block title %}Portfolio — Prop Desk{% endblock %}
 
 {% block content %}
+<div class="dashboard-greeting">
+  <h1 class="greeting-title">Welcome {{ current_user.display_name }}</h1>
+  <p class="greeting-sub">Here's an overview of your accounts.</p>
+</div>
+
 <div class="page-header">
   <div class="page-header-left">
-    <h1 class="page-title">Portfolio</h1>
     <span class="page-sub">{{ cards|length }} account{{ 's' if cards|length != 1 else '' }}</span>
   </div>
   <div class="page-header-right">

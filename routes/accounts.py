@@ -427,6 +427,7 @@ def edit_account(account_id):
         acct.current_risk = current_risk
         acct.distribution_id = dist_id
         acct.best_day_so_far = best_day
+        acct.forward_url = f.get("forward_url", "").strip() or None
 
         _log(ActivityKind.SETTING_CHANGE, "Account {} edited".format(acct.nickname),
              account=acct, payload={"editor": current_user.username})

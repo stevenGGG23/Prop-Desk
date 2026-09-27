@@ -158,6 +158,19 @@
     </div>
   </div>
 
+  <div class="form-section">
+    <h2 class="form-section-title">Connections</h2>
+    <div class="field-row">
+      <div class="field field--wide">
+        <label class="label" for="forward_url">TradersPost webhook URL <span class="label-optional">(optional)</span></label>
+        <input class="input" type="url" id="forward_url" name="forward_url"
+               value="{{ acct.forward_url or '' }}"
+               placeholder="https://webhooks.traderspost.io/trading/webhook/…">
+        <span class="field-hint">When Prop Desk receives a signal, it will also forward it to this URL.</span>
+      </div>
+    </div>
+  </div>
+
   <div class="form-actions">
     <button type="submit" class="btn btn--primary">Save changes</button>
     <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="btn btn--ghost">Cancel</a>

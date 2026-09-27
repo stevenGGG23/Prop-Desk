@@ -147,6 +147,9 @@ class Account(db.Model):
     # Distribution for simulation
     distribution_id = db.Column(db.Integer, db.ForeignKey("distributions.id"), nullable=True)
 
+    # Forward incoming webhook payloads to this URL (e.g. TradersPost)
+    forward_url = db.Column(db.String(512), nullable=True)
+
     opened_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at = db.Column(db.DateTime, nullable=True)
 

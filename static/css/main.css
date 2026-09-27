@@ -24,6 +24,7 @@
   --yellow:     #f59e0b;
 
   --nav-h:      52px;
+  --sidebar-w:  196px;
   --radius:     8px;
   --radius-sm:  5px;
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
@@ -127,107 +128,122 @@ h3 { font-size: 1rem; font-weight: 600; }
 }
 
 /* ---------------------------------------------------------
-   Navigation
+   Sidebar
    --------------------------------------------------------- */
-.nav {
+.sidebar {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  height: var(--nav-h);
+  bottom: 0;
+  width: var(--sidebar-w);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
+  flex-direction: column;
   z-index: 100;
-  gap: 16px;
+  overflow: hidden;
 }
 
-[data-theme="dark"] .nav {
-  background: rgba(17,23,32,0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+[data-theme="dark"] .sidebar {
+  background: rgba(17,23,32,0.96);
 }
 
-.nav-left {
+.sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 9px;
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
   flex-shrink: 0;
-  padding-right: 16px;
 }
 
-.nav-wordmark {
+.sidebar-wordmark {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
   letter-spacing: -0.02em;
 }
 
-.nav-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-  flex-shrink: 0;
-  margin-right: 12px;
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  overflow-y: auto;
 }
 
-.nav-links {
+.sidebar-link {
   display: flex;
   align-items: center;
-  gap: 2px;
-}
-
-.nav-link {
-  color: var(--ink-dim);
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
-  padding: 5px 9px;
-  border-radius: var(--radius-sm);
+  color: var(--ink-dim);
+  text-decoration: none;
   transition: color var(--transition), background var(--transition);
   letter-spacing: -0.01em;
 }
 
-.nav-link:hover {
+.sidebar-link:hover {
   color: var(--ink);
   background: var(--surface-2);
 }
 
-.nav-link.is-active {
+.sidebar-link.is-active {
   color: var(--accent);
   background: var(--accent-dim);
 }
 
-.nav-link--muted {
-  font-size: 12px;
+.sidebar-link svg { flex-shrink: 0; }
+
+.sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.nav-right {
+.sidebar-user {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  padding: 2px 0;
 }
 
-.nav-user {
+.sidebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar-signout {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
   color: var(--ink-dim);
-  letter-spacing: -0.01em;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition), background var(--transition);
+  margin-left: 2px;
 }
+
+.sidebar-signout:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+/* Keep nav-link for any legacy refs */
+.nav-link { color: var(--ink-dim); font-size: 13px; text-decoration: none; }
 
 /* Theme toggle button */
 .theme-toggle {
@@ -261,12 +277,15 @@ h3 { font-size: 1rem; font-weight: 600; }
    Main Layout
    --------------------------------------------------------- */
 .main {
-  padding-top: calc(var(--nav-h) + 28px);
+  padding-top: 32px;
   padding-bottom: 64px;
-  padding-left: 24px;
-  padding-right: 24px;
+  padding-left: 32px;
+  padding-right: 32px;
   max-width: 1440px;
-  margin: 0 auto;
+}
+
+.has-sidebar .main {
+  margin-left: var(--sidebar-w);
 }
 
 /* Login: full page centered */
@@ -283,7 +302,7 @@ h3 { font-size: 1rem; font-weight: 600; }
    --------------------------------------------------------- */
 .flash-container {
   position: fixed;
-  top: calc(var(--nav-h) + 8px);
+  top: 16px;
   right: 16px;
   z-index: 200;
   display: flex;
@@ -331,6 +350,23 @@ h3 { font-size: 1rem; font-weight: 600; }
 /* ---------------------------------------------------------
    Page Header
    --------------------------------------------------------- */
+.dashboard-greeting {
+  margin-bottom: 24px;
+}
+
+.greeting-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  margin-bottom: 3px;
+}
+
+.greeting-sub {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
 .page-header {
   display: flex;
   align-items: flex-end;
@@ -959,6 +995,16 @@ h3 { font-size: 1rem; font-weight: 600; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--ink-dim);
+  opacity: 0.75;
 }
 
 .label {
