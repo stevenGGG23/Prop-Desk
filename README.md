@@ -2,7 +2,25 @@
 
 A private portfolio dashboard for tracking prop firm futures accounts, sizing trades, and answering the two questions that actually matter every day: **how many losses can this account take right now**, and **how long until it passes**.
 
-Built for accounts running an automated MNQ strategy through TradingView to TradersPost, across Lucid Trading, Tradeify, and any firm added later.
+Built for accounts running an automated MNQ strategy through TradingView → TradersPost, across Lucid Trading, Tradeify, and any firm added later.
+
+**Live:** [prop-desk-nb7p.onrender.com](https://prop-desk-nb7p.onrender.com/)
+
+---
+
+## Screenshots
+
+### Portfolio
+![Portfolio dashboard](docs/screenshots/portfolio.png)
+
+### Daily Advisor
+![Advisor page showing risk ladder per account](docs/screenshots/advisor.png)
+
+### Stats
+![Stats page with per-account win rate and weekday breakdown](docs/screenshots/stats.png)
+
+### Calendar
+![Trading calendar with daily P&L](docs/screenshots/calendar.png)
 
 ---
 
@@ -25,9 +43,10 @@ This app keeps every account's state in one place, recomputes the right risk set
 | Auth | Flask-Login + Werkzeug password hashing | |
 | Frontend | Jinja2 templates + vanilla JS + Chart.js | No build step, no framework churn |
 | Math | NumPy | Monte Carlo simulations |
+| Scheduler | APScheduler | Daily email reports at 6 AM ET Mon–Fri |
 | Host | Render (web service + Postgres) | |
 
-No React, no Tailwind CDN, no component library. Hand-written CSS with a real type scale.
+No React, no Tailwind CDN, no component library. Hand-written CSS with a real type scale, dark/light mode.
 
 ---
 
@@ -69,7 +88,7 @@ losses = floor(room / (risk_per_trade + friction))
 ```
 max_risk(n) = (room / n) - friction
 ```
-This is the headline number. If the user wants to survive 3 losses, this is the largest risk setting that still does it. The UI must show the **whole ladder** (2, 3, 4, 5, 6 losses), because the difference between 1,400 and 1,798 is the same safety with meaningfully more speed. Never show only one recommendation.
+This is the headline number. If the user wants to survive 3 losses, this is the largest risk setting that still does it. The UI shows the **whole ladder** (2, 3, 4, 5, 6 losses), because the difference between 1,400 and 1,798 is the same safety with meaningfully more speed. Never show only one recommendation.
 
 **4. EOD trailing floor update**
 ```
@@ -131,84 +150,111 @@ The single most important output here is the **withdrawal discipline curve**: mo
 ## Features
 
 ### Portfolio dashboard
-- One card per account: phase, balance, room, losses survivable, progress to target, current risk setting, and whether that setting is still correct
-- Green/red outlines show net account performance after net payouts and account costs
-- **Portfolio health score** driven by the weakest account, not the average
-- Joint-wipeout probability across all accounts on the shared signal
-- Total projected monthly income once all accounts are funded
+- One card per account: phase, balance, room, losses survivable, progress to target, current risk setting, estimated days to pass
+- TradingView-style sparkline equity curve per card
+- Green/red border stripes show net account performance
+- 3-dot menu on each card → View details · Edit · Delete
+- **Portfolio health score** and joint-wipeout probability across all accounts
+- Light/dark mode toggle (persisted in localStorage)
+
+### Webhook integration
+- One master inbound URL per user — connect all accounts through a single TradingView / TradersPost webhook
+- Route trades to accounts by including `"account": "nickname"` in the JSON payload
+- Parses action, sentiment, price, pnl, balance, quantity from standard TradersPost/TV format
+- Account balance updates automatically on each fill
+
+### Daily email report
+- Sent at **6 AM ET, Mon–Fri** automatically via APScheduler
+- Covers balance, room, losses survivable, and risk setting for all accounts
+- No button required — fires on schedule even when the app is sleeping
 
 ### Account detail
-- Full trade log
+- Full trade log with TradingView-style two-row layout (Exit row / Entry row per trade)
 - Equity curve with the trailing floor drawn underneath it
 - Risk ladder table (2 through 6 losses survivable, with pass odds and expected trades for each)
 - Live warning when current risk exceeds the 3-loss threshold
 
-### Trade log
-- Add a trade: date, direction, entry, exit, size, P&L, which account
-- Import actual fills from a CSV, preview rows, map common columns, and safely repeat uploads without duplicating fills
-- Keep imported trading days open for later fills; explicitly finalize days to update EOD floors
-- Enter one net daily result instead of individual trades, and correct the latest daily result before later activity is recorded
-- Link fills and daily results to a named bot version
-
-### Bots and calendar
-- Register bot/strategy versions and record signal, order, fill, rejection, error, and note events
-- Imported fills appear in the bot's event history; manually entered events can be linked to accounts
-- Calendar view groups daily results and trades by date, with account filters and monthly totals
-
-### Backtests and projections
-- Import a separate backtest CSV to create a versioned distribution from P&L divided by base risk; this never changes account balance
-- Funded projections show simulated monthly payout ranges, breach frequency, and a withdrawal-cushion curve using editable payout assumptions
-- Distributions and bot metadata created by a user are private to that user
-
-### Settings advisor
-The daily driver. For each account, given today's state:
-- recommended risk
-- what to change it to after a win
-- what to change it to after a loss
-- when the floor locks and the account can safely size up
-- if the user proposes an aggressive or full-port size, show the real odds, including the single-win-clears-target check and the contract-cap rejection rate
-
-Never silently accept a proposed size. Always show the ladder next to it.
+### Daily advisor
+- Per-account risk ladder with Speed vs Conservative column
+- After-a-win and after-a-loss recommended risk shown separately
+- Floor lock status and when it triggers
+- One-click "Set risk" to update the account from the advisor page
 
 ### Stats
 - Overall win rate and per-account win rate
-- **Win rate by weekday**, with sample size shown next to every figure. A 56% Thursday over 9 trades is noise, and the UI must make that obvious rather than inviting the user to build a filter on it
-- Live win rate versus source-backtest win rate, side by side. This gap is the single largest source of error in every projection
-- Slippage tracker: signal price versus actual fill, entry and exit, averaged over time. This is the number everything else depends on
+- **Win rate by weekday**, with sample size shown next to every figure. A 56% Thursday over 9 trades is noise, and the UI makes that obvious
+- Slippage tracker: signal price versus actual fill, averaged over time
+
+### Calendar
+- Monthly view grouped by trading day
+- Per-account filter
+- Month P&L, trade count, and trading day count in the header
+
+### Projections
+- Funded-phase payout projection with editable payout assumptions
+- Withdrawal discipline curve showing monthly income vs breach risk at different cushion levels
 
 ### Activity log
-Append-only. Every trade, setting change, payout, phase change, and breach, timestamped. Never editable. This is the audit trail that makes the stats trustworthy.
+Append-only. Every trade, setting change, payout, phase change, and breach, timestamped. Never editable.
 
 ### Multi-user
-Separate login per person, fully isolated data. Steven, Boula, Martin. No shared views, no cross-account visibility.
+Separate login per person, fully isolated data. No shared views, no cross-account visibility.
+
+---
+
+## TradingView alert setup
+
+1. Open a chart with your strategy → **Alerts** → **+ Alert**
+2. Set **Condition** to your strategy, **Interval** to match your timeframe
+3. Under **Notifications**, enable **Webhook URL** and paste your URL from the Portfolio page → *Webhook setup*
+4. In the **Message** box, paste pure JSON — no text before or after it:
+
+```json
+{
+  "account": "Flex 50K",
+  "ticker": "{{ticker}}",
+  "action": "{{strategy.order.action}}",
+  "sentiment": "{{strategy.market_position}}",
+  "price": {{close}},
+  "pnl": {{strategy.netprofit}}
+}
+```
+
+Replace `"Flex 50K"` with your account's exact nickname. The `{{...}}` placeholders are TradingView variables — leave them as-is. One webhook URL handles all accounts; just change the `"account"` field per alert.
+
+| Field | What it does | Required? |
+|---|---|---|
+| `account` | Routes to the matching account (case-insensitive) | Yes |
+| `action` | `buy` or `sell` | No |
+| `pnl` | Cumulative strategy P&L — adjusts balance by the delta | No |
+| `balance` | Absolute balance — overrides directly | No |
+| `price` | Fill price | No |
+| `quantity` | Contract count | No |
 
 ---
 
 ## Data model
 
 ```
-User            id, username, password_hash, display_name, created_at
-Firm            id, name, default_rules_json
+User            id, username, password_hash, display_name, inbound_token, created_at
+Firm            id, name, logo_filename, default_rules_json
 Account         id, user_id, firm_id, nickname, external_id, phase,
                 starting_balance, current_balance, peak_balance,
                 max_loss_limit, drawdown_amount, drawdown_type, lock_threshold,
                 profit_target, daily_loss_limit, dll_is_hard,
                 consistency_pct, contract_cap, current_risk, cost_paid,
-                opened_at, closed_at
+                best_day_so_far, distribution_id, opened_at, closed_at
 Trade           id, account_id, opened_at, closed_at, direction,
                 signal_price, fill_price, exit_signal_price, exit_fill_price,
                 quantity, pnl, r_multiple, was_rejected, rejection_reason,
                 bot_id, import_hash
-Bot             id, user_id, name, version, source, notes, active
-DailyResult     id, account_id, bot_id, trade_date, pnl, source, correction snapshot
-BotEvent        id, bot_id, account_id, event_type, message, event_at, source_key
+DailyResult     id, account_id, bot_id, trade_date, pnl, source
 Payout          id, account_id, requested_at, gross, net, balance_after
 Distribution    id, name, source, win_multiples_json, loss_multiples_json,
                 qty_at_base_risk_json, base_risk, signal_frequency
 ActivityLog     id, user_id, account_id, kind, message, payload_json, created_at
+WebhookReceiver id, user_id, account_id, token
 ```
-
-`Distribution` is what the simulator samples from. Ship with one seeded from a strategy CSV; allow re-import when the strategy changes. **A distribution with a different risk-reward ratio is a different distribution**, not a parameter tweak. A 1:1 setting and a 2.2 setting had win rates of 75.6% and 50.6% on the same strategy.
 
 ---
 
@@ -219,61 +265,52 @@ GET  /login
 POST /login
 GET  /logout
 
-GET  /                       portfolio dashboard
+GET  /                               portfolio dashboard
 GET  /accounts/new
-POST /accounts
+POST /accounts/new
 GET  /accounts/<id>
+GET  /accounts/<id>/edit
+POST /accounts/<id>/edit
+POST /accounts/<id>/delete
 POST /accounts/<id>/trades
 POST /accounts/<id>/daily-result
 POST /accounts/<id>/close-day
 POST /accounts/<id>/payouts
-POST /accounts/<id>/risk     update current risk setting
+POST /accounts/<id>/risk
 
-GET  /advisor                cross-account daily recommendations
+GET  /advisor
 GET  /stats
 GET  /log
-GET  /bots
+GET  /trades                         TradingView-style trade list (filterable by account)
 GET  /calendar
 GET  /projections
 
-GET  /api/simulate           ?account_id&risk[]  -> odds for each candidate
-GET  /api/portfolio-risk     joint simulation across all accounts
-GET  /api/imports             actual fills and backtest uploads
-POST /api/import-csv          actual trade fills
-POST /api/import-distribution backtest outcomes to R-multiples
+POST /api/inbound/<token>            master inbound webhook
+GET  /api/simulate                   ?account_id&risk[] → odds for each candidate
+GET  /api/portfolio-risk             joint simulation across all accounts
+POST /api/import-csv
+POST /api/import-distribution
 ```
-
-Simulation endpoints return JSON and are called from the client so risk sliders update live. Cache results by `(account_state_hash, risk)` for 15 minutes. Simulations are expensive and account state only changes on a trade.
 
 ---
 
-## Design direction
+## Design
 
-The brief is "does not look vibe coded." Concretely:
-
-- **Dark, but not black.** Background around `#0b0e13`, cards a step lighter with a visible 1px border. Pure black with neon accents reads as a template
-- **One accent color**, used only for the number that matters on each card. Everything else is grayscale
-- **Tabular figures** for all numbers (`font-variant-numeric: tabular-nums`). Financial data that shifts as it updates looks broken
-- **A real type scale.** Three sizes on a card, maximum. Big number, label, supporting detail
-- **Semantic color only.** Green and red mean profit and loss, nothing else. Do not color a heading green because it looks nice
-- **Density over whitespace.** This is a working dashboard, not a landing page. Five accounts should fit above the fold
-- **No gradients, no glass, no emoji, no animated counters**
-- Loading states for every simulation call. They take a second and a frozen UI feels broken
-
-Charts: Chart.js, grid lines at 10% opacity, no legends when a single series is obvious, no drop shadows.
+- **Dark, but not black.** Background `#0b0e13`, cards a step lighter with a 1px border
+- **One accent color**, used only for the number that matters on each card
+- **Tabular figures** (`font-variant-numeric: tabular-nums`) on all financial data
+- **Light/dark mode** toggle in the nav, with theme-before-paint flash prevention
+- **Semantic color only.** Green = profit, red = loss, nothing else
+- Density over whitespace — five accounts above the fold
 
 ---
 
 ## Security
 
-The whole point of this app is that it holds a private record of real money. Treat it that way.
-
-- Passwords are **hashed with Werkzeug**, never stored in plain text and never committed
-- Initial passwords are set from environment variables at first boot and must be changed on first login. Do not hardcode credentials anywhere in the repo
-- `Password123` is fine for local development and is not acceptable in production. Render sets `SECRET_KEY` and initial passwords as environment variables
+- Passwords hashed with Werkzeug, never stored or committed in plain text
 - Session cookies: `Secure`, `HttpOnly`, `SameSite=Lax`
-- Rate limit the login route
-- No registration route. Users are seeded by a management command
+- Login route is rate limited
+- No registration route — users are seeded by management command
 - `.env` in `.gitignore` from the first commit
 
 ---
@@ -283,61 +320,49 @@ The whole point of this app is that it holds a private record of real money. Tre
 1. Create a **PostgreSQL** instance, copy the internal connection string
 2. Create a **Web Service** from this repo
    - Build: `pip install -r requirements.txt && flask db upgrade`
-   - Start: `gunicorn app:app`
+   - Start: `gunicorn --workers 1 app:app`
 3. Environment variables:
 
 ```
 DATABASE_URL       from the Render Postgres instance
 SECRET_KEY         long random string
 FLASK_ENV          production
-SEED_USERS         comma separated, e.g. "Steven Gobran,Boula Salib,Martin"
-SEED_PASSWORD      temporary, must be changed on first login
+MAIL_FROM          sender address for daily reports
+MAIL_TO            recipient address
+MAIL_HOST          SMTP host
+MAIL_PORT          587
+MAIL_USER          SMTP username
+MAIL_PASS          SMTP password
 ```
 
 4. Run `flask seed-users` once from the Render shell
 
-**Do not use SQLite.** The free tier wipes the filesystem on every deploy and sleep cycle. The entire requirement of "stays updated and cached the same every visit" depends on Postgres.
+**Use `--workers 1` with gunicorn.** APScheduler runs in-process; multiple workers cause the daily email to fire multiple times.
+
+**Do not use SQLite.** The free tier wipes the filesystem on every deploy. The entire requirement of "stays updated every visit" depends on Postgres.
 
 ---
 
-## Build order
+## Running locally
 
-1. Auth, user model, seeded login, base layout
-2. Account model and CRUD, one hardcoded firm ruleset
-3. Trade entry and balance updates; EOD floors update when a day is finalized
-4. Room and risk ladder, displayed on the account card
-5. Monte Carlo engine plus `/api/simulate`
-6. Portfolio dashboard with joint simulation
-7. Actual-fill CSV import, bot versions, and backtest distribution import
-8. Funded-phase payout projections and the withdrawal discipline curve
-9. Stats page, weekday breakdown, slippage tracker
-10. Activity log
-11. Design pass
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # fill in DATABASE_URL and SECRET_KEY
+flask db upgrade
+flask seed-accounts            # optional: seed preset accounts
+flask run
+```
 
-Ship 1 through 4 before writing any simulation code. An account card that correctly shows room and the risk ladder is already more useful than the spreadsheet it replaces.
-
----
-
-## Acceptance criteria
-
-- Adding a trade updates balance, room, losses survivable, and win rate, and writes an activity log entry; EOD floor and phase are evaluated when the day is closed
-- Correcting the latest daily result applies only the difference and preserves an audit entry
-- Reimporting a fill CSV does not duplicate fills or account P&L
-- The risk ladder shows at least four loss counts with pass odds for each
-- Proposing a risk setting above the 3-loss threshold triggers a visible warning with the real odds, not a silent accept
-- Portfolio joint-wipeout probability uses a shared trade sequence
-- Every win-rate figure displays its sample size
-- No credentials in the repository
-- Data survives a redeploy
+Tests:
+```bash
+python -m pytest tests/
+```
 
 ---
 
 ## Known limits
 
-Every projection assumes the imported distribution keeps describing the future. It probably does not, exactly. Backtest exports typically carry **zero commission and zero slippage**, so treat imported win rates as an optimistic ceiling and let the slippage tracker replace them with measured numbers as real fills accumulate. The app should make that divergence visible rather than hiding it behind a single confident number.
-
-Bot entries here are tracking records; this app does not run the trading strategy or connect directly to TradingView or TradersPost. Bot events can be entered in the UI, and actual fills can be imported from CSV. Import complete or incremental exports for open days; duplicate fills are skipped, and a finalized day cannot accept later fills. Backtest distributions are separate from actual fills and require the user to choose the P&L column, base risk, and signal frequency. Funded projections currently simplify firm-specific rules and should be treated as scenarios, not payout promises.
-
-Run the focused automated checks with `python -m unittest discover -s tests`. Apply schema changes with `flask db upgrade` before deploying.
+Every projection assumes the imported distribution keeps describing the future. Backtest exports carry zero commission and zero slippage — treat imported win rates as an optimistic ceiling and let the slippage tracker replace them with measured numbers as real fills accumulate.
 
 This is a record-keeping and decision-support tool. It does not place orders, and it is not financial advice.

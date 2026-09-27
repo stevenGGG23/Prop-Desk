@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ acct.nickname }} — Prop Desk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="back-link">{{ acct.nickname }}</a>
+    <h1 class="page-title">Edit account</h1>
+  </div>
+</div>
+
+<div class="form-card">
+<form method="POST" action="{{ url_for('accounts.edit_account', account_id=acct.id) }}">
+
+  <div class="form-section">
+    <h2 class="form-section-title">Firm</h2>
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="firm_id">Firm</label>
+        <select class="input" id="firm_id" name="firm_id" required>
+          <option value="">Select a firm…</option>
+          {% for firm in firms %}
+          <option value="{{ firm.id }}" {% if firm.id == acct.firm_id %}selected{% endif %}>{{ firm.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="phase">Phase</label>
+        <select class="input" id="phase" name="phase">
+          {% for p in ['EVAL','FUNDED','LIVE','PASSED','BREACHED'] %}
+          <option value="{{ p }}" {% if acct.phase.value == p %}selected{% endif %}>{{ p.title() }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="nickname">Nickname</label>
+        <input class="input" type="text" id="nickname" name="nickname"
+               value="{{ acct.nickname }}" placeholder="e.g. Growth 150k">
+      </div>
+      <div class="field">
+        <label class="label" for="external_id">External ID <span class="label-optional">(optional)</span></label>
+        <input class="input" type="text" id="external_id" name="external_id"
+               value="{{ acct.external_id or '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <h2 class="form-section-title">Balance</h2>
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="starting_balance">Starting balance ($)</label>
+        <input class="input num" type="number" id="starting_balance" name="starting_balance"
+               step="0.01" required value="{{ acct.starting_balance }}">
+      </div>
+      <div class="field">
+        <label class="label" for="current_balance">Current balance ($)</label>
+        <input class="input num" type="number" id="current_balance" name="current_balance"
+               step="0.01" value="{{ acct.current_balance }}">
+      </div>
+      <div class="field">
+        <label class="label" for="cost_paid">Cost paid ($)</label>
+        <input class="input num" type="number" id="cost_paid" name="cost_paid"
+               step="0.01" value="{{ acct.cost_paid or '' }}" placeholder="0">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <h2 class="form-section-title">Drawdown rules</h2>
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="drawdown_type">Drawdown type</label>
+        <select class="input" id="drawdown_type" name="drawdown_type">
+          {% for dt in ['EOD_TRAILING','INTRADAY_TRAILING','STATIC'] %}
+          <option value="{{ dt }}" {% if acct.drawdown_type.value == dt %}selected{% endif %}>
+            {{ dt.replace('_',' ').title() }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="drawdown_amount">Drawdown amount ($)</label>
+        <input class="input num" type="number" id="drawdown_amount" name="drawdown_amount"
+               step="0.01" required value="{{ acct.drawdown_amount }}">
+      </div>
+      <div class="field">
+        <label class="label" for="current_mll">Current MLL ($)</label>
+        <input class="input num" type="number" id="current_mll" name="current_mll"
+               step="0.01" value="{{ acct.max_loss_limit or '' }}" placeholder="Auto">
+      </div>
+      <div class="field">
+        <label class="label" for="lock_threshold">Floor locks at ($)</label>
+        <input class="input num" type="number" id="lock_threshold" name="lock_threshold"
+               step="0.01" value="{{ acct.lock_threshold or '' }}" placeholder="Auto">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <h2 class="form-section-title">Evaluation targets</h2>
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="profit_target">Profit target ($)</label>
+        <input class="input num" type="number" id="profit_target" name="profit_target"
+               step="0.01" value="{{ acct.profit_target or '' }}">
+      </div>
+      <div class="field">
+        <label class="label" for="daily_loss_limit">Daily loss limit ($)</label>
+        <input class="input num" type="number" id="daily_loss_limit" name="daily_loss_limit"
+               step="0.01" value="{{ acct.daily_loss_limit or '' }}">
+      </div>
+      <div class="field">
+        <label class="label" for="consistency_pct">Consistency rule (%)</label>
+        <input class="input num" type="number" id="consistency_pct" name="consistency_pct"
+               step="1" min="0" max="100"
+               value="{{ (acct.consistency_pct * 100)|int if acct.consistency_pct else '' }}">
+      </div>
+      <div class="field">
+        <label class="label" for="contract_cap">Max contracts</label>
+        <input class="input num" type="number" id="contract_cap" name="contract_cap"
+               value="{{ acct.contract_cap or '' }}">
+      </div>
+      <div class="field field--checkbox" style="align-self:flex-end;">
+        <label class="label-check">
+          <input type="checkbox" id="dll_is_hard" name="dll_is_hard"
+                 {% if acct.dll_is_hard %}checked{% endif %}>
+          DLL is hard
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <h2 class="form-section-title">Current state</h2>
+    <div class="field-row">
+      <div class="field">
+        <label class="label" for="current_risk">Risk setting ($)</label>
+        <input class="input num" type="number" id="current_risk" name="current_risk"
+               step="0.01" value="{{ acct.current_risk or '' }}">
+      </div>
+      <div class="field">
+        <label class="label" for="best_day_so_far">Best day so far ($)</label>
+        <input class="input num" type="number" id="best_day_so_far" name="best_day_so_far"
+               step="0.01" value="{{ acct.best_day_so_far or '' }}">
+      </div>
+      <div class="field">
+        <label class="label" for="distribution_id">Trade distribution</label>
+        <select class="input" id="distribution_id" name="distribution_id">
+          <option value="">None</option>
+          {% for dist in distributions %}
+          <option value="{{ dist.id }}" {% if acct.distribution_id == dist.id %}selected{% endif %}>
+            {{ dist.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn--primary">Save changes</button>
+    <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="btn btn--ghost">Cancel</a>
+  </div>
+
+</form>
+</div>
+{% endblock %}

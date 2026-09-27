@@ -92,6 +92,22 @@
       <span class="phase-badge phase-badge--{{ phase_val|lower }}">{{ phase_val }}</span>
     </div>
 
+    {# ── 3-dot kebab menu ── #}
+    <div class="card-menu" onclick="event.preventDefault(); event.stopPropagation();">
+      <button class="card-menu-btn" onclick="toggleCardMenu(this)" aria-label="Account options">⋯</button>
+      <div class="card-menu-dropdown">
+        <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="card-menu-item">View details</a>
+        <a href="{{ url_for('accounts.edit_account', account_id=acct.id) }}" class="card-menu-item">Edit</a>
+        <div class="card-menu-divider"></div>
+        <form method="POST" action="{{ url_for('accounts.delete_account', account_id=acct.id) }}">
+          <button type="submit" class="card-menu-item card-menu-item--danger"
+                  onclick="return confirm('Delete \'{{ acct.nickname }}\'? This cannot be undone.')">
+            Delete
+          </button>
+        </form>
+      </div>
+    </div>
+
     <div class="card-nickname">{{ acct.nickname }}</div>
 
     <div class="card-balance">
@@ -268,6 +284,22 @@ document.querySelectorAll('.sparkline-canvas').forEach(function(canvas) {
 
 
 {% endif %}
+
+// ── Card kebab menu ──
+function toggleCardMenu(btn) {
+  const dropdown = btn.nextElementSibling;
+  const isOpen = dropdown.classList.contains('is-open');
+  // Close all open menus first
+  document.querySelectorAll('.card-menu-dropdown.is-open').forEach(function(d) {
+    d.classList.remove('is-open');
+  });
+  if (!isOpen) dropdown.classList.add('is-open');
+}
+document.addEventListener('click', function() {
+  document.querySelectorAll('.card-menu-dropdown.is-open').forEach(function(d) {
+    d.classList.remove('is-open');
+  });
+});
 
 // Webhook panel toggle
 document.getElementById('toggle-webhook-panel').addEventListener('click', function() {

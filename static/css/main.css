@@ -1906,3 +1906,68 @@ select.input {
 .tv-pnl { font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
 .tv-r { font-size: 12px; color: var(--ink-dim); }
 .tv-r.text-profit, .tv-r.text-loss { }
+
+/* ── Card kebab menu ── */
+.account-card { position: relative; }
+.card-menu {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+.card-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: background .15s, color .15s;
+}
+.card-menu-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.card-menu-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 150px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  z-index: 100;
+}
+.card-menu-dropdown.is-open { display: block; }
+.card-menu-item {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s;
+}
+.card-menu-item:hover { background: var(--surface-2); }
+.card-menu-item--danger { color: #f87171; }
+.card-menu-item--danger:hover { background: rgba(248,113,113,.08); }
+.card-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}
