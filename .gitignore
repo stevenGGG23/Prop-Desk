@@ -58,3 +58,8 @@ htmlcov/
 # Distribution
 *.manifest
 *.spec
+
+# Loose media — screenshots and data files belong in docs/
+/Screenshot*.png
+/docs*.png
+/*.csv

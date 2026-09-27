@@ -1,3 +1,4 @@
+from urllib.parse import urlparse, urljoin
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from app import db, limiter
@@ -22,7 +23,12 @@ def login():
             if user.must_change_password:
                 flash("Please set a new password before continuing.", "warning")
                 return redirect(url_for("auth.change_password"))
-            next_page = request.args.get("next")
+            next_page = request.args.get("next", "")
+            # Reject absolute URLs to prevent open redirect
+            parsed = urlparse(urljoin(request.host_url, next_page))
+            safe = urlparse(request.host_url)
+            if not (parsed.scheme in ("http", "https") and parsed.netloc == safe.netloc):
+                next_page = ""
             return redirect(next_page or url_for("accounts.dashboard"))
 
         flash("Invalid username or password.", "error")

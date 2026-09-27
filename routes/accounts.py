@@ -2,6 +2,7 @@ import json
 import math
 import secrets
 from datetime import date, datetime, timezone
+from urllib.parse import urlparse
 
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_required, current_user
@@ -427,7 +428,14 @@ def edit_account(account_id):
         acct.current_risk = current_risk
         acct.distribution_id = dist_id
         acct.best_day_so_far = best_day
-        acct.forward_url = f.get("forward_url", "").strip() or None
+        raw_url = f.get("forward_url", "").strip()
+        if raw_url:
+            scheme = urlparse(raw_url).scheme
+            if scheme not in ("http", "https"):
+                flash("Forward URL must start with http:// or https://", "error")
+                return render_template("accounts/edit.html", acct=acct, firms=firms,
+                                       distributions=distributions)
+        acct.forward_url = raw_url or None
 
         _log(ActivityKind.SETTING_CHANGE, "Account {} edited".format(acct.nickname),
              account=acct, payload={"editor": current_user.username})

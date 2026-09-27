@@ -6,7 +6,9 @@ import math
 import time
 from datetime import datetime, timezone
 
+from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, current_app, render_template
+from flask_wtf.csrf import csrf_exempt
 from flask_login import login_required, current_user
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
@@ -599,6 +601,7 @@ def import_distribution():
 # ---------------------------------------------------------------------------
 
 @bp.route("/webhook/<token>", methods=["POST"])
+@csrf_exempt
 def receive_webhook(token):
     """Public endpoint: no login required — token is the credential."""
     receiver = WebhookReceiver.query.filter_by(token=token, active=True).first()
@@ -673,6 +676,7 @@ def receive_webhook(token):
 # ---------------------------------------------------------------------------
 
 @bp.route("/inbound/<token>", methods=["POST"])
+@csrf_exempt
 def inbound_webhook(token):
     """One webhook URL per user.  Route trades to the right account using
     the "account" field in the payload (matched against Account.nickname or
@@ -853,7 +857,7 @@ def send_daily_report_email(flask_app):
             logger.warning("Daily report skipped: GMAIL_APP_PASSWORD not set.")
             return
 
-        gmail_address = "stevengobran@gmail.com"
+        gmail_address = flask_app.config.get("REPORT_EMAIL", "stevengobran@gmail.com")
 
         accounts = (Account.query
                     .order_by(Account.opened_at.desc())

@@ -6,6 +6,7 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +15,7 @@ logging.basicConfig(level=logging.INFO)
 
 db = SQLAlchemy()
 migrate = Migrate()
+csrf = CSRFProtect()
 
 login_manager = LoginManager()
 limiter = Limiter(key_func=get_remote_address)
@@ -28,8 +30,16 @@ def create_app(env=None):
 
     db.init_app(app)
     migrate.init_app(app, db)
+    csrf.init_app(app)
     login_manager.init_app(app)
     limiter.init_app(app)
+
+    @app.after_request
+    def _security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return response
 
     login_manager.login_view = "auth.login"
     login_manager.login_message = "Sign in to access Prop Desk."

@@ -9,6 +9,8 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     RATELIMIT_DEFAULT = "200 per day;50 per hour"
     RATELIMIT_STORAGE_URL = "memory://"
+    WTF_CSRF_ENABLED = True
+    WTF_CSRF_HEADERS = ["X-CSRFToken"]
 
     # Daily email report — only GMAIL_APP_PASSWORD is needed on Render.
     # Both sender and recipient are hard-coded to the owner's Gmail.
