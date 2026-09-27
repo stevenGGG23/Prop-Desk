@@ -151,18 +151,29 @@ h3 { font-size: 1rem; font-weight: 600; }
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 22px 18px 18px;
+  justify-content: center;
+  padding: 8px 5px;
   border-bottom: 1px solid var(--border);
   text-decoration: none;
   flex-shrink: 0;
 }
 
-.sidebar-wordmark {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: -0.02em;
+.sidebar-logo-image {
+  width: 220px;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.brand-logo-image--dark {
+  display: none;
+}
+
+[data-theme="dark"] .brand-logo-image--dark {
+  display: block;
+}
+
+[data-theme="dark"] .brand-logo-image--light {
+  display: none;
 }
 
 .sidebar-nav {

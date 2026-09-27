@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Prop Desk{% endblock %}</title>
 
-  <link rel="icon" href="{{ url_for('static', filename='brand/logoPD.png') }}" type="image/png">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/logoPD.png') }}">
+    <link id="brand-favicon" rel="icon" href="{{ url_for('static', filename='brand/logoPD-dark.png') }}"
+      data-dark-href="{{ url_for('static', filename='brand/logoPD-dark.png') }}"
+      data-light-href="{{ url_for('static', filename='brand/logoPD-light.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/logoPD-light.png') }}">
   <meta name="theme-color" content="#0b0e13" id="theme-color-meta">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,6 +21,8 @@
     (function() {
       var t = localStorage.getItem('pd-theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
+      var icon = document.getElementById('brand-favicon');
+      if (icon) icon.href = icon.getAttribute('data-' + t + '-href');
     })();
   </script>
   {% block head %}{% endblock %}
@@ -30,8 +34,8 @@
 
   {# ── Logo ── #}
   <a href="{{ url_for('accounts.dashboard') }}" class="sidebar-logo">
-    <img src="{{ url_for('static', filename='brand/logoPD.png') }}" alt="" width="36" height="36" style="flex-shrink:0;">
-    <span class="sidebar-wordmark">Prop Desk</span>
+    <img class="sidebar-logo-image brand-logo-image--light" src="{{ url_for('static', filename='brand/logoPD-light.png') }}" alt="Prop Desk">
+    <img class="sidebar-logo-image brand-logo-image--dark" src="{{ url_for('static', filename='brand/logoPD-dark.png') }}" alt="Prop Desk">
   </a>
 
   {# ── Nav links ── #}
@@ -170,6 +174,8 @@
     localStorage.setItem('pd-theme', next);
     var m = document.getElementById('theme-color-meta');
     if (m) m.setAttribute('content', next === 'light' ? '#f8fafc' : '#0b0e13');
+    var icon = document.getElementById('brand-favicon');
+    if (icon) icon.href = icon.getAttribute('data-' + next + '-href');
     setTimeout(function() { html.removeAttribute('data-theme-transitioning'); }, 200);
   });
 })();

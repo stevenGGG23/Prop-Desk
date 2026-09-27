@@ -64,6 +64,8 @@ class AccountRouteTests(unittest.TestCase):
             db.session.commit()
 
         page = self.client.get("/settings")
+        self.assertIn(b'brand/logoPD-dark.png', page.data)
+        self.assertIn(b'brand/logoPD-light.png', page.data)
         csrf_token = re.search(
             r'<meta name="csrf-token" content="([^"]+)"',
             page.get_data(as_text=True),
@@ -95,10 +97,11 @@ class AccountRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'name="csrf_token"', response.data)
-        self.assertIn(b'brand/logoPD.png', response.data)
-        logo = self.client.get("/static/brand/logoPD.png")
-        self.assertEqual(logo.status_code, 200)
-        self.assertEqual(logo.mimetype, "image/png")
+        self.assertIn(b'brand/logoPD-dark.png', response.data)
+        for variant in ("dark", "light"):
+            logo = self.client.get(f"/static/brand/logoPD-{variant}.png")
+            self.assertEqual(logo.status_code, 200)
+            self.assertEqual(logo.mimetype, "image/png")
 
     def test_daily_result_can_be_corrected_without_double_counting(self):
         url = "/accounts/{}/daily-result".format(self.account_id)
