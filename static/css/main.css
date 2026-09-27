@@ -1908,7 +1908,9 @@ select.input {
 .tv-r.text-profit, .tv-r.text-loss { }
 
 /* ── Card kebab menu ── */
-.account-card { position: relative; }
+.account-card-wrap {
+  position: relative; /* anchor for the absolutely-positioned menu */
+}
 .card-menu {
   position: absolute;
   top: 12px;

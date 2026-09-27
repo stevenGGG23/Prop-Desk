@@ -73,6 +73,24 @@
   {% set is_passed = phase_val == 'PASSED' %}
   {% set show_performance_outline = not is_breached and not is_passed %}
 
+  <div class="account-card-wrap">
+
+  {# ── 3-dot kebab menu — must be OUTSIDE the <a> card ── #}
+  <div class="card-menu" onclick="event.stopPropagation();">
+    <button class="card-menu-btn" onclick="toggleCardMenu(this)" aria-label="Account options">⋯</button>
+    <div class="card-menu-dropdown">
+      <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="card-menu-item">View details</a>
+      <a href="{{ url_for('accounts.edit_account', account_id=acct.id) }}" class="card-menu-item">Edit</a>
+      <div class="card-menu-divider"></div>
+      <form method="POST" action="{{ url_for('accounts.delete_account', account_id=acct.id) }}">
+        <button type="submit" class="card-menu-item card-menu-item--danger"
+                onclick="return confirm('Delete \'{{ acct.nickname }}\'? This cannot be undone.')">
+          Delete
+        </button>
+      </form>
+    </div>
+  </div>
+
   <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}"
       class="account-card {% if is_breached %}account-card--breached{% elif is_passed %}account-card--passed{% elif card.risk_warning %}account-card--warning{% endif %} {% if show_performance_outline and card.net_performance > 0 %}account-card--winning{% elif show_performance_outline and card.net_performance < 0 %}account-card--losing{% endif %}">
 
@@ -90,22 +108,6 @@
         <span class="firm-name">{{ acct.firm.name }}</span>
       </div>
       <span class="phase-badge phase-badge--{{ phase_val|lower }}">{{ phase_val }}</span>
-    </div>
-
-    {# ── 3-dot kebab menu ── #}
-    <div class="card-menu" onclick="event.preventDefault(); event.stopPropagation();">
-      <button class="card-menu-btn" onclick="toggleCardMenu(this)" aria-label="Account options">⋯</button>
-      <div class="card-menu-dropdown">
-        <a href="{{ url_for('accounts.account_detail', account_id=acct.id) }}" class="card-menu-item">View details</a>
-        <a href="{{ url_for('accounts.edit_account', account_id=acct.id) }}" class="card-menu-item">Edit</a>
-        <div class="card-menu-divider"></div>
-        <form method="POST" action="{{ url_for('accounts.delete_account', account_id=acct.id) }}">
-          <button type="submit" class="card-menu-item card-menu-item--danger"
-                  onclick="return confirm('Delete \'{{ acct.nickname }}\'? This cannot be undone.')">
-            Delete
-          </button>
-        </form>
-      </div>
     </div>
 
     <div class="card-nickname">{{ acct.nickname }}</div>
@@ -211,6 +213,7 @@
     </div>
 
   </a>
+  </div>{# end .account-card-wrap #}
   {% endfor %}
 </div>
 
