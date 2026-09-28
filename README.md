@@ -27,7 +27,7 @@ It answers the two questions that matter every session:
 
 ---
 
-## 🎯 The strategy: Sniper Range Bot V2
+## The strategy: Sniper Range Bot V2
 
 I built **Sniper Range Bot V2**, an automated MNQ (Micro Nasdaq-100) futures strategy written in TradingView Pine Script, and I trade it with real money on **funded prop firm accounts and my personal account**. Signals fire on a 15-minute chart. TradersPost routes the orders to the broker, so no one has to click anything. Prop Desk records every fill and checks live results against the backtest.
 
@@ -49,44 +49,24 @@ I built **Sniper Range Bot V2**, an automated MNQ (Micro Nasdaq-100) futures str
 
 ---
 
-## ⚙️ How it all works
+## How it all works
 
 ```mermaid
 flowchart TD
-    subgraph BUILD["🧠 Strategy"]
-        PINE["Sniper Range Bot V2<br/>Pine Script on MNQ 15m"]
-        BT["Backtest in TradingView<br/>75.86% win rate · PF 3.16"]
-        PINE --> BT --> PINE
-    end
+    A["Sniper Range Bot V2<br/>Pine Script strategy, MNQ 15m"]
+    B["TradingView alert<br/>entry with 1:1 take profit and stop loss"]
+    C["TradersPost<br/>converts the signal into an order"]
+    D["Prop firm or personal account<br/>order executed"]
+    E["Trade closes<br/>take profit or stop loss hit"]
+    F["Prop Desk webhook<br/>realized P&L recorded once per event"]
+    G["Risk engine<br/>room, survivable losses, trailing floor"]
+    H["Dashboard, advisor, stats, daily email"]
+    I["Profit target reached<br/>evaluation passed, account funded"]
+    J["Payouts withdrawn<br/>planned with Monte Carlo projections"]
 
-    subgraph EXEC["⚡ Execution"]
-        ALERT["TradingView alert fires<br/>entry signal + 1:1 TP / SL"]
-        TP["TradersPost<br/>turns the signal into an order"]
-        BROKER["Prop firm / personal account<br/>Lucid · Tradeify · Apex"]
-        ALERT --> TP --> BROKER
-    end
-
-    subgraph DESK["📊 Prop Desk (Flask + PostgreSQL)"]
-        HOOK["/api/inbound/&lt;token&gt;<br/>routes by account name,<br/>drops duplicate event IDs"]
-        ENGINE["Risk engine<br/>room · survivable losses ·<br/>trailing floor · days to pass"]
-        UI["Dashboard · Advisor · Stats<br/>Calendar · Activity log"]
-        MAIL["6 AM ET daily email"]
-        HOOK --> ENGINE --> UI
-        ENGINE --> MAIL
-    end
-
-    subgraph PROFIT["💰 Taking profit"]
-        CLOSE["Take profit or stop loss hit<br/>realized P&L sent back"]
-        PASS["Profit target reached<br/>evaluation passed → funded"]
-        PAYOUT["Payouts withdrawn<br/>Monte Carlo projections plan them"]
-        CLOSE --> PASS --> PAYOUT
-    end
-
-    PINE --> ALERT
-    ALERT -. "optional: signal via Prop Desk,<br/>forwarded to TradersPost" .-> HOOK
-    BROKER --> CLOSE
-    CLOSE -- "fill webhook<br/>pnl_mode: realized" --> HOOK
-    UI -- "tomorrow's risk per trade" --> PINE
+    A --> B --> C --> D --> E --> F --> G --> H
+    G --> I --> J
+    H --> A
 ```
 
 1. **Build:** the strategy is written and backtested in TradingView until its edge holds up across market conditions.
@@ -96,37 +76,37 @@ flowchart TD
 
 ---
 
-## ✨ Features
+## Features
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
-**📊 Portfolio dashboard**<br>
+**Portfolio dashboard**<br>
 One card per account with balance, room above the floor, losses the account can survive at current risk, progress to the profit target, and estimated days to pass.
 
-**🪜 Risk ladder**<br>
+**Risk ladder**<br>
 The largest safe risk per trade if you want to survive 2, 3, 4, 5, or 6 losses, so you can choose a cushion without guessing.
 
-**🧭 Daily advisor**<br>
+**Daily advisor**<br>
 Recommendations for each account's session: what risk becomes after a win or a loss, and when the floor locks.
 
-**🔗 Webhook integration**<br>
+**Webhook integration**<br>
 One URL takes trades from TradingView or TradersPost for every account and routes each one by the account name in the payload. Retried deliveries are ignored.
 
 </td>
 <td width="50%" valign="top">
 
-**📈 Stats**<br>
+**Stats**<br>
 Win rate for each account, win rate by weekday with sample sizes, and slippage tracking.
 
-**🗓️ Calendar**<br>
+**Calendar**<br>
 Monthly P&L view with a per-account filter.
 
-**🔮 Projections**<br>
+**Projections**<br>
 Monte Carlo simulation of funded-phase payouts (20k+ runs) and a withdrawal discipline curve.
 
-**📬 Daily email · 📝 Activity log · 🌗 Dark/light mode**<br>
+**Daily email · Activity log · Dark/light mode**<br>
 A snapshot of every account emailed at 6 AM ET, an append-only audit trail of trades, setting changes, and payouts, and a theme setting that is saved between sessions.
 
 </td>
@@ -135,7 +115,7 @@ A snapshot of every account emailed at 6 AM ET, an append-only audit trail of tr
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 <table>
 <tr>
@@ -149,7 +129,7 @@ A snapshot of every account emailed at 6 AM ET, an append-only audit trail of tr
 
 ---
 
-## 🛠️ Stack
+## Stack
 
 | Layer | Choice |
 |---|---|
@@ -184,7 +164,7 @@ Prop-Desk/
 
 ---
 
-## 🧮 How the math works
+## How the math works
 
 **Room** = `current_balance − max_loss_limit`
 
@@ -199,7 +179,7 @@ Prop-Desk/
 ---
 
 <details>
-<summary><h2>🔌 TradingView webhook setup</h2></summary>
+<summary><h2>TradingView webhook setup</h2></summary>
 
 1. Portfolio page → **Webhook setup** → copy your inbound URL
 2. In TradingView: **Alerts → + Alert → Notifications → Webhook URL** → paste the URL
@@ -235,7 +215,7 @@ If a TradersPost forward URL is configured, signal-only events may trigger live 
 </details>
 
 <details>
-<summary><h2>🚀 Deployment (Render)</h2></summary>
+<summary><h2>Deployment (Render)</h2></summary>
 
 1. Create a **PostgreSQL** instance and copy the internal connection string
 2. Create a **Web Service** pointed at this repo
@@ -267,7 +247,7 @@ created, remove the bootstrap variables. Do not commit real passwords.
 </details>
 
 <details>
-<summary><h2>💻 Running locally</h2></summary>
+<summary><h2>Running locally</h2></summary>
 
 ```bash
 python -m venv venv && source venv/bin/activate
@@ -281,7 +261,7 @@ flask run
 
 ---
 
-## 🔒 Security
+## Security
 
 - Passwords are hashed with Werkzeug. They are never stored in plain text or committed
 - Session cookies are `Secure`, `HttpOnly`, and `SameSite=Lax`
