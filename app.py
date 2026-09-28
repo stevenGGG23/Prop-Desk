@@ -28,6 +28,8 @@ def create_app(env=None):
     from config import config_map
     env = env or os.environ.get("FLASK_ENV", "development")
     app.config.from_object(config_map.get(env, config_map["development"]))
+    if env == "production" and not app.config.get("SECRET_KEY"):
+        raise RuntimeError("SECRET_KEY must be set in production.")
 
     db.init_app(app)
     migrate.init_app(app, db)

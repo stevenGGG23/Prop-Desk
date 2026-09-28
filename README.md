@@ -1,67 +1,155 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="static/brand/logoPD-dark.png">
+  <img src="static/brand/logoPD-light.png" alt="Prop Desk" width="140">
+</picture>
+
 # Prop Desk
 
-A private portfolio dashboard for tracking prop firm futures accounts across Lucid Trading and Tradeify. Answers the two questions that matter every session: **how many losses can this account take right now**, and **how long until it passes**.
+**A risk-management dashboard for prop firm futures accounts, fed live by my own automated trading bot.**
 
-**Live demo:** [prop-desk-nb7p.onrender.com](https://prop-desk-nb7p.onrender.com/)
+It answers the two questions that matter every session:
+*how many losses can this account take right now*, and *how long until it passes*.
 
----
+[![Live demo](https://img.shields.io/badge/Live_demo-prop--desk-10b981?style=for-the-badge)](https://prop-desk-nb7p.onrender.com/)
+&nbsp;
+![Python](https://img.shields.io/badge/Python_3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask_3-000000?style=for-the-badge&logo=flask&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![TradingView](https://img.shields.io/badge/Pine_Script-131722?style=for-the-badge&logo=tradingview&logoColor=white)
 
-## The strategy
+</div>
 
-All accounts run the **Sniper Range Bot V2** — an automated MNQ futures algorithm built in TradingView Pine Script. Signals fire on a 15-minute chart; orders are routed through TradersPost to live prop firm accounts with no manual intervention.
-
-Key stats from the backtest:
-- **~75% win rate** on MNQ 15m
-- Consistent across multiple market conditions
-- Average win-to-loss ratio keeps expectancy positive even at reduced position sizes
-- Signals fire on roughly 68% of trading days
-
-Prop Desk tracks every live fill against these numbers so you always see how live performance compares to the model.
-
----
-
-## Screenshots
-
-**Portfolio dashboard**
+<br>
 
 ![Portfolio dashboard](docs/screenshots/portfolio.png)
 
-**Daily advisor — risk ladder per account**
+---
 
-![Daily advisor](docs/screenshots/advisor.png)
+## 🎯 The strategy: Sniper Range Bot V2
 
-**Stats**
+I built **Sniper Range Bot V2**, an automated MNQ (Micro Nasdaq-100) futures strategy written in TradingView Pine Script, and I trade it with real money on **funded prop firm accounts and my personal account**. Signals fire on a 15-minute chart. TradersPost routes the orders to the broker, so no one has to click anything. Prop Desk records every fill and checks live results against the backtest.
 
-![Stats](docs/screenshots/stats.png)
+<div align="center">
 
-**Trading calendar**
+| Win rate | Trades | Profit factor | Net P&L (50K acct) | Max drawdown |
+|:---:|:---:|:---:|:---:|:---:|
+| **75.86%** | 66 / 87 | **3.16** | **+$92,538** (+185%) | 7.11% |
 
-![Calendar](docs/screenshots/calendar.png)
+<sub>TradingView backtest, MNQ 15m, Mar 31 – Sep 25, 2026. Past performance does not guarantee future results.</sub>
 
-**Strategy backtest results (TradingView)**
+</div>
 
 ![Sniper Range Bot V2 backtest](docs/screenshots/strategy.png)
 
----
-
-## What it does
-
-- **Portfolio dashboard** — one card per account showing balance, room above the floor, losses survivable at current risk, progress to profit target, and estimated days to pass
-- **Risk ladder** — shows max safe risk at 2, 3, 4, 5, and 6 survivable losses so you can pick your cushion without guessing
-- **Daily advisor** — per-account recommendations for today's session, including what risk becomes after a win or loss, and when the floor locks
-- **Webhook integration** — one URL receives trades from TradingView or TradersPost for all accounts; routes by account name in the payload
-- **Automatic daily email** — sent at 6 AM ET Mon–Fri with a snapshot of every account
-- **Trades page** — TradingView-style trade list with entry/exit rows, P&L, and direction badges
-- **Stats** — per-account win rate, win rate by weekday with sample sizes, slippage tracker
-- **Calendar** — monthly P&L view with per-account filter
-- **Projections** — funded-phase payout simulation and withdrawal discipline curve
-- **Activity log** — append-only audit trail of every trade, setting change, and payout
-- **Dark / light mode** — toggle in the nav, persisted across sessions
-- **3-dot card menu** — edit or delete accounts directly from the portfolio view
+- A per-weekday direction filter (long only, short only, or both) based on each day's historical edge
+- Fixed 1:1 risk-to-reward, with position size set from risk per trade
+- Built to stay inside prop firm drawdown and consistency rules
 
 ---
 
-## Stack
+## ⚙️ How it all works
+
+```mermaid
+flowchart TD
+    subgraph BUILD["🧠 Strategy"]
+        PINE["Sniper Range Bot V2<br/>Pine Script on MNQ 15m"]
+        BT["Backtest in TradingView<br/>75.86% win rate · PF 3.16"]
+        PINE --> BT --> PINE
+    end
+
+    subgraph EXEC["⚡ Execution"]
+        ALERT["TradingView alert fires<br/>entry signal + 1:1 TP / SL"]
+        TP["TradersPost<br/>turns the signal into an order"]
+        BROKER["Prop firm / personal account<br/>Lucid · Tradeify · Apex"]
+        ALERT --> TP --> BROKER
+    end
+
+    subgraph DESK["📊 Prop Desk (Flask + PostgreSQL)"]
+        HOOK["/api/inbound/&lt;token&gt;<br/>routes by account name,<br/>drops duplicate event IDs"]
+        ENGINE["Risk engine<br/>room · survivable losses ·<br/>trailing floor · days to pass"]
+        UI["Dashboard · Advisor · Stats<br/>Calendar · Activity log"]
+        MAIL["6 AM ET daily email"]
+        HOOK --> ENGINE --> UI
+        ENGINE --> MAIL
+    end
+
+    subgraph PROFIT["💰 Taking profit"]
+        CLOSE["Take profit or stop loss hit<br/>realized P&L sent back"]
+        PASS["Profit target reached<br/>evaluation passed → funded"]
+        PAYOUT["Payouts withdrawn<br/>Monte Carlo projections plan them"]
+        CLOSE --> PASS --> PAYOUT
+    end
+
+    PINE --> ALERT
+    ALERT -. "optional: signal via Prop Desk,<br/>forwarded to TradersPost" .-> HOOK
+    BROKER --> CLOSE
+    CLOSE -- "fill webhook<br/>pnl_mode: realized" --> HOOK
+    UI -- "tomorrow's risk per trade" --> PINE
+```
+
+1. **Build:** the strategy is written and backtested in TradingView until its edge holds up across market conditions.
+2. **Execute:** when a setup forms, a TradingView alert sends the signal (with take profit and stop loss) to TradersPost, which places the order on the prop firm or personal account.
+3. **Track:** every closed trade posts its realized P&L to Prop Desk's webhook. Prop Desk updates the balance, the trailing drawdown floor, and how many more losses the account can survive.
+4. **Take profit:** when an evaluation reaches its target the account becomes funded, and the projections page plans payouts. The advisor sets the next session's risk, and the cycle repeats.
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**📊 Portfolio dashboard**<br>
+One card per account with balance, room above the floor, losses the account can survive at current risk, progress to the profit target, and estimated days to pass.
+
+**🪜 Risk ladder**<br>
+The largest safe risk per trade if you want to survive 2, 3, 4, 5, or 6 losses, so you can choose a cushion without guessing.
+
+**🧭 Daily advisor**<br>
+Recommendations for each account's session: what risk becomes after a win or a loss, and when the floor locks.
+
+**🔗 Webhook integration**<br>
+One URL takes trades from TradingView or TradersPost for every account and routes each one by the account name in the payload. Retried deliveries are ignored.
+
+</td>
+<td width="50%" valign="top">
+
+**📈 Stats**<br>
+Win rate for each account, win rate by weekday with sample sizes, and slippage tracking.
+
+**🗓️ Calendar**<br>
+Monthly P&L view with a per-account filter.
+
+**🔮 Projections**<br>
+Monte Carlo simulation of funded-phase payouts (20k+ runs) and a withdrawal discipline curve.
+
+**📬 Daily email · 📝 Activity log · 🌗 Dark/light mode**<br>
+A snapshot of every account emailed at 6 AM ET, an append-only audit trail of trades, setting changes, and payouts, and a theme setting that is saved between sessions.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📸 Screenshots
+
+<table>
+<tr>
+<td width="50%"><b>Daily advisor</b>: risk ladder per account<br><img src="docs/screenshots/advisor.png" alt="Daily advisor"></td>
+<td width="50%"><b>Stats</b>: win rate by weekday and slippage<br><img src="docs/screenshots/stats.png" alt="Stats"></td>
+</tr>
+<tr>
+<td colspan="2"><b>Trading calendar</b>: monthly P&L<br><img src="docs/screenshots/calendar.png" alt="Calendar"></td>
+</tr>
+</table>
+
+---
+
+## 🛠️ Stack
 
 | Layer | Choice |
 |---|---|
@@ -72,13 +160,46 @@ Prop Desk tracks every live fill against these numbers so you always see how liv
 | Frontend | Jinja2 + vanilla JS + Chart.js |
 | Simulation | NumPy (Monte Carlo, 20k+ runs) |
 | Scheduler | APScheduler (daily email) |
+| Trading | TradingView Pine Script → TradersPost |
 | Host | Render |
 
 No React, no Tailwind, no component library.
 
+### Project structure
+
+```
+Prop-Desk/
+├── app.py              # app factory, security headers, scheduler
+├── config.py           # environment-based settings
+├── models.py           # SQLAlchemy models (users, accounts, trades, webhooks)
+├── cli.py              # flask commands (seed users, etc.)
+├── engine/             # pure-Python math: risk, accounting, funded phase, Monte Carlo
+├── routes/             # Flask blueprints, one per page, plus api.py (webhooks + daily email)
+├── templates/          # Jinja2 pages
+├── static/             # CSS, JS, brand assets, prop firm logos
+├── migrations/         # Alembic database migrations
+├── tests/              # pytest suite
+└── docs/               # screenshots, backtest export, source artwork
+```
+
 ---
 
-## TradingView webhook setup
+## 🧮 How the math works
+
+**Room** = `current_balance − max_loss_limit`
+
+**Max risk for N survivable losses** = `(room / N) − friction`
+
+`friction` defaults to $25 per trade to cover commission and slippage.
+
+**EOD trailing floor**: the floor rises with peak balance until it reaches `lock_threshold`, then stays fixed. Once that happens the card shows "Floor locked", because further wins no longer raise the floor, which changes how much you can safely risk.
+
+**Estimated days to pass** assumes an average daily gain equal to `current_risk` (one trade a day at 1R). That way it follows today's sizing instead of a historical average that may no longer apply.
+
+---
+
+<details>
+<summary><h2>🔌 TradingView webhook setup</h2></summary>
 
 1. Portfolio page → **Webhook setup** → copy your inbound URL
 2. In TradingView: **Alerts → + Alert → Notifications → Webhook URL** → paste the URL
@@ -95,72 +216,58 @@ No React, no Tailwind, no component library.
 }
 ```
 
-Replace `"Flex 50K"` with your account's exact nickname. One URL handles all your accounts — just change the `"account"` field per alert. The match is case-insensitive. This sample logs signals only and does not change the account balance.
+Replace `"Flex 50K"` with your account's exact nickname. One URL handles all your accounts; just change the `"account"` field for each alert. The match is not case-sensitive. This sample only logs signals and does not change the account balance.
 
 | Field | Effect |
 |---|---|
 | `account` | Routes the trade to the right account **(required)** |
-| `event_id` | Unique event identifier; required when sending P&L, protects against retried deliveries |
-| `action` | `buy` or `sell` — sets trade direction |
-| `pnl` | Realized P&L for exactly one completed trade; never send a cumulative strategy total |
+| `event_id` | Unique event identifier. Required when sending P&L; stops a retried delivery from being counted twice |
+| `action` | `buy` or `sell`; sets trade direction |
+| `pnl` | Realized P&L for exactly one completed trade. Never send a cumulative strategy total |
 | `balance` | Sets the account balance directly |
 | `price` | Records entry/exit price |
 | `quantity` | Contract count |
 
-To update the balance from fills, send realized P&L once when a trade closes and include its stable `event_id` (or `execution_id`, `fill_id`, or `trade_id`). Set `pnl_mode` explicitly to `realized` (or `delta`); the `pnl` value is treated as a per-event amount and added to the balance. Missing modes and cumulative values such as TradingView's `strategy.netprofit` are rejected. After webhook trades arrive, use **Close trading day** on the account page to finalize daily results and EOD drawdown rules. If a TradersPost forward URL is configured, signal-only events may trigger live orders; fill and balance-update events are never forwarded. Failed forwards appear in the Activity log, and a duplicate event ID will not be forwarded again; verify downstream acceptance before sending a new event ID.
+To update the balance from fills, send realized P&L once when a trade closes and include its stable `event_id` (or `execution_id`, `fill_id`, or `trade_id`). Set `pnl_mode` explicitly to `realized` (or `delta`). The `pnl` value is treated as the amount for that one event and added to the balance. Requests without a mode are rejected, and so are cumulative values such as TradingView's `strategy.netprofit`. After webhook trades arrive, use **Close trading day** on the account page to finalize daily results and apply EOD drawdown rules.
 
----
+If a TradersPost forward URL is configured, signal-only events may trigger live orders. Fill and balance-update events are never forwarded. Failed forwards appear in the Activity log, and an event ID that was already used will not be forwarded again, so check that TradersPost accepted the order before you send a new event ID.
 
-## How the math works
+</details>
 
-**Room** = `current_balance − max_loss_limit`
+<details>
+<summary><h2>🚀 Deployment (Render)</h2></summary>
 
-**Max risk for N survivable losses** = `(room / N) − friction`
-
-`friction` defaults to $25/trade to cover commission and slippage.
-
-**EOD trailing floor** moves up with peak balance until it hits `lock_threshold`, then freezes. The card shows "Floor locked" when this happens because the risk picture changes: once locked, no more losses are taken from additional wins.
-
-**Estimated days to pass** uses `current_risk` as the assumed average daily gain (one trade/day at 1R), so it reflects today's sizing rather than a historical average that may not apply.
-
----
-
-## Deployment (Render)
-
-1. Create a **PostgreSQL** instance, copy the internal connection string
+1. Create a **PostgreSQL** instance and copy the internal connection string
 2. Create a **Web Service** pointed at this repo
    - Build command: `pip install -r requirements.txt && flask db upgrade`
    - Start command: `gunicorn --workers 1 app:app`
 3. Set environment variables:
 
 ```
-DATABASE_URL    internal Render Postgres URL
-SECRET_KEY      long random string
-FLASK_ENV       production
-MAIL_FROM       sender address for daily reports
-MAIL_TO         recipient address
-MAIL_HOST       SMTP hostname
-MAIL_PORT       587
-MAIL_USER       SMTP username
-MAIL_PASS       SMTP password
+DATABASE_URL        internal Render Postgres URL
+SECRET_KEY          long random string (required; the app will not start without it)
+FLASK_ENV           production
+REPORT_EMAIL        Gmail address the daily report is sent from and to
+GMAIL_APP_PASSWORD  Gmail app password for that address
 ```
 
 4. Run `flask seed-users` once from the Render shell to create your login
 
-To provision one user without the Render Shell, add `BOOTSTRAP_USER_ENABLED=true`,
+To create one user without the Render Shell, add `BOOTSTRAP_USER_ENABLED=true`,
 `BOOTSTRAP_USER_USERNAME`, `BOOTSTRAP_USER_DISPLAY_NAME`, `BOOTSTRAP_USER_EMAIL`,
 and `BOOTSTRAP_USER_PASSWORD` to the service's Environment settings, then deploy.
-The app creates the user on startup only if the username and email are unused and
-requires a password change at first login. Remove the bootstrap variables after
-the deployment reports that the user was created. Do not commit real passwords.
+On startup the app creates the user only if the username and email are not already taken, and
+the user must change the password at first login. Once the deployment reports that the user was
+created, remove the bootstrap variables. Do not commit real passwords.
 
-> **`--workers 1` is required.** APScheduler runs in-process; multiple workers fire the daily email multiple times.
+> **`--workers 1` is required.** APScheduler runs inside the web process, so with multiple workers the daily email is sent once per worker.
 >
-> **SQLite will not work.** Render's filesystem resets on every deploy. Postgres is not optional.
+> **SQLite will not work.** Render's filesystem resets on every deploy, so you need Postgres.
 
----
+</details>
 
-## Running locally
+<details>
+<summary><h2>💻 Running locally</h2></summary>
 
 ```bash
 python -m venv venv && source venv/bin/activate
@@ -170,16 +277,24 @@ flask db upgrade
 flask run
 ```
 
----
-
-## Security
-
-- Passwords hashed with Werkzeug — never stored in plain text, never committed
-- Session cookies: `Secure`, `HttpOnly`, `SameSite=Lax`
-- Login route is rate-limited
-- No self-registration — users are created via management command
-- `.env` is in `.gitignore`
+</details>
 
 ---
 
-This is a record-keeping and decision-support tool. It does not place orders and is not financial advice.
+## 🔒 Security
+
+- Passwords are hashed with Werkzeug. They are never stored in plain text or committed
+- Session cookies are `Secure`, `HttpOnly`, and `SameSite=Lax`
+- The login route is rate-limited
+- No self-registration: users are created with a management command
+- `.env` is listed in `.gitignore`
+
+---
+
+<div align="center">
+
+**Built by [Steven Gobran](https://github.com/stevenGGG23)**
+
+<sub>Prop Desk keeps records and helps with trading decisions. It does not place orders itself (the bot does that through TradersPost), and nothing here is financial advice.</sub>
+
+</div>

@@ -12,9 +12,8 @@ class Config:
     WTF_CSRF_ENABLED = True
     WTF_CSRF_HEADERS = ["X-CSRFToken"]
 
-    # Daily email report — only GMAIL_APP_PASSWORD is needed on Render.
-    # Both sender and recipient are hard-coded to the owner's Gmail.
-    REPORT_EMAIL = "stevengobran@gmail.com"
+    # Daily email report — sent from and to REPORT_EMAIL using a Gmail app password.
+    REPORT_EMAIL = os.environ.get("REPORT_EMAIL", "").strip()
     GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
     # Optional one-time account provisioning from deployment environment variables.
@@ -41,6 +40,10 @@ class ProductionConfig(Config):
     elif _db_url.startswith("postgresql://"):
         _db_url = _db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
     SQLALCHEMY_DATABASE_URI = _db_url
+    # Refuse to run production with the public fallback key, which would let
+    # anyone forge session cookies.
+    if Config.SECRET_KEY == "dev-secret-change-in-production":
+        SECRET_KEY = None
 
 
 class TestingConfig(Config):

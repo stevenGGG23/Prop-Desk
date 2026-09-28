@@ -1058,7 +1058,10 @@ def send_daily_report_email(flask_app):
             logger.warning("Daily report skipped: GMAIL_APP_PASSWORD not set.")
             return
 
-        gmail_address = flask_app.config.get("REPORT_EMAIL", "stevengobran@gmail.com")
+        gmail_address = flask_app.config.get("REPORT_EMAIL", "")
+        if not gmail_address:
+            logger.warning("Daily report skipped: REPORT_EMAIL not set.")
+            return
 
         accounts = (Account.query
                     .order_by(Account.opened_at.desc())
