@@ -5,8 +5,6 @@
   <img src="static/brand/logoPD-light.png" alt="Prop Desk" width="140">
 </picture>
 
-# Prop Desk
-
 **A risk-management dashboard for prop firm futures accounts, fed live by my own automated trading bot.**
 
 It answers the two questions that matter every session:
