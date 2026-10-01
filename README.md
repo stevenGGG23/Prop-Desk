@@ -39,7 +39,13 @@ I built **Sniper Range Bot V2**, an automated MNQ (Micro Nasdaq-100) futures str
 
 </div>
 
-![Sniper Range Bot V2 backtest](docs/screenshots/strategy.png)
+![Sniper Range Bot V2 backtest](docs/screenshots/strategy.png) 
+
+## Other Bot strategys
+<img width="1010" height="1034" alt="image" src="https://github.com/user-attachments/assets/1d4ffa1e-8f6c-4502-8435-0fbf2d83304d" /> 
+<img width="1573" height="466" alt="image" src="https://github.com/user-attachments/assets/a736cf26-172f-4c66-8417-b92bae097700" />
+
+
 
 - A per-weekday direction filter (long only, short only, or both) based on each day's historical edge
 - Fixed 1:1 risk-to-reward, with position size set from risk per trade
